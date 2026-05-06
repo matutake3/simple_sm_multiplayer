@@ -8,7 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -36,9 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +57,21 @@ import jp.simplist.smmultiplayer.ui.theme.PlayerBg
 import jp.simplist.smmultiplayer.ui.theme.PlayerEmptyBg
 import kotlin.math.abs
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
+
+private const val LONG_PRESS_MS: Long = 400L
+
+/**
+ * Vertical strip at the very top of the window (in dp) that is reserved for
+ * the TopBar pull-down gesture in [PlayerApp]. A pointer DOWN landing in
+ * this zone must not be interpreted as a cell-level volume drag — otherwise
+ * the swipe-down-to-open-the-bar gesture leaks into the cell underneath and
+ * silently slides the volume to zero before the user even sees the bar.
+ */
+private val TOP_EDGE_RESERVED_DP = 40.dp
+
+/** Outcome of the cell's gesture-decision phase. */
+private enum class GestureOutcome { Cancel, Tap, HDrag, VDrag, LongPress }
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -82,12 +99,37 @@ fun PlayerCell(
     onSetLoopB: () -> Unit,
     onClearLoop: () -> Unit,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
+    /**
+     * Long-press → drag-and-drop reorder hooks. Cell-local pointer position
+     * is converted to window coordinates (`localPos + cellWindowOrigin`)
+     * before being passed to the parent so it can hit-test against other
+     * cells. The parent is responsible for visual lift / target-highlight /
+     * actually committing the swap on drop.
+     */
+    onReorderStart: () -> Unit = {},
+    onReorderMove: (windowPos: Offset, dragDelta: Offset) -> Unit = { _, _ -> },
+    onReorderEnd: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var controlsVisible by remember { mutableStateOf(false) }
     var volumeIndicator by remember { mutableStateOf<Float?>(null) }
     var seekIndicator by remember { mutableStateOf<SeekIndicatorState?>(null) }
     val effectivelyVisible = controlsAlwaysVisible || controlsVisible
+
+    // Bumped on any user interaction with the controls overlay (tap to show,
+    // skip / seek / play-toggle / resize / speed / loop button presses, drag
+    // gestures). Each bump resets the auto-hide timer below.
+    var interactionTick by remember { mutableIntStateOf(0) }
+    val markInteraction: () -> Unit = { interactionTick++ }
+
+    // Auto-hide the overlay 3 s after the most recent interaction. Skipped
+    // when the user has explicitly opted into "controls always visible".
+    LaunchedEffect(controlsVisible, interactionTick, controlsAlwaysVisible) {
+        if (controlsVisible && !controlsAlwaysVisible) {
+            delay(3_000)
+            controlsVisible = false
+        }
+    }
 
     // Notify the ViewModel so it can skip position polling for cells whose
     // seekbar isn't currently on screen.
@@ -118,66 +160,183 @@ fun PlayerCell(
     val latestIsSoloTarget by rememberUpdatedState(isSoloTarget)
     val latestVolumeGesture by rememberUpdatedState(volumeGestureEnabled)
     val latestSeekGesture by rememberUpdatedState(seekGestureEnabled)
+    // Reorder callbacks change every parent composition (their closures pull
+    // grid-level drag state). pointerInput keeps the same coroutine across
+    // recompositions, so we MUST forward through rememberUpdatedState —
+    // otherwise the running gesture invokes stale callbacks captured at
+    // first composition and the drop never lands.
+    val latestOnReorderStart by rememberUpdatedState(onReorderStart)
+    val latestOnReorderMove by rememberUpdatedState(onReorderMove)
+    val latestOnReorderEnd by rememberUpdatedState(onReorderEnd)
+
+    // Origin of this cell in the window coordinate space, refreshed on every
+    // layout pass. Used to translate cell-local pointer positions into window
+    // coordinates the parent grid can hit-test against other cells' bounds.
+    var cellWindowOrigin by remember { mutableStateOf(Offset.Zero) }
+    val latestCellOrigin by rememberUpdatedState(cellWindowOrigin)
 
     Box(
         modifier = modifier
             .background(if (hasVideo) PlayerBg else PlayerEmptyBg)
-            .pointerInput(hasVideo) {
-                detectTapGestures(
-                    onTap = {
-                        if (!hasVideo) {
-                            onPickVideo()
-                        } else if (latestSoloAudio && !latestIsSoloTarget) {
-                            // Solo audio mode: tapping a non-target cell makes
-                            // it the audio source. Force-show controls so the
-                            // ♪ 音声中 chip on this cell becomes the visual
-                            // confirmation of the switch.
-                            onActivateSolo()
-                            if (!controlsVisible) controlsVisible = true
-                        } else {
-                            controlsVisible = !controlsVisible
-                        }
-                    },
-                )
+            .onGloballyPositioned { coords ->
+                cellWindowOrigin = coords.positionInWindow()
             }
             .pointerInput(hasVideo) {
-                if (!hasVideo) return@pointerInput
-                var dragStartVolume = 0f
-                var dragStartPosMs = 0L
-                detectDirectionalDrag(
-                    onVerticalStart = { dragStartVolume = latestSlot.volume },
-                    onVerticalDelta = { totalDy ->
-                        if (latestVolumeGesture) {
-                            val cellHeight = size.height.toFloat().coerceAtLeast(1f)
-                            val deltaVol = -totalDy / cellHeight
-                            val newVol = (dragStartVolume + deltaVol).coerceIn(0f, 1f)
-                            onVolumeChange(newVol)
-                            if (latestSoloAudio && !latestIsSoloTarget) onActivateSolo()
-                            volumeIndicator = newVol
+                // Single unified gesture detector. The first ~400 ms of a
+                // press is a "decision window" — based on what happens we
+                // route into one of four outcomes:
+                //   - Tap          : finger lifts before the long-press timeout
+                //   - Horizontal drag (seek)   : finger moves past slop, dx > dy
+                //   - Vertical drag   (volume) : finger moves past slop, dy > dx
+                //   - Long-press   : 400 ms of no movement → enter reorder mode
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!hasVideo) {
+                        // Empty slots: the only meaningful gesture is a tap
+                        // to launch the file picker.
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            onPickVideo()
+                            markInteraction()
                         }
-                    },
-                    onHorizontalStart = {
-                        dragStartPosMs = player.currentPosition
-                    },
-                    onHorizontalDelta = { totalDx ->
-                        if (latestSeekGesture) {
-                            val cellWidth = size.width.toFloat().coerceAtLeast(1f)
-                            val durationMs = latestSlot.durationMs.coerceAtLeast(1L)
-                            // 1 screen width ≈ 60 s seek
-                            val totalDeltaMs = (totalDx / cellWidth * 60_000f).toLong()
-                            val target = (dragStartPosMs + totalDeltaMs).coerceIn(0L, durationMs)
-                            seekIndicator = SeekIndicatorState(dragStartPosMs, target, committed = false)
+                        return@awaitEachGesture
+                    }
+
+                    val slop = viewConfiguration.touchSlop
+                    // NOTE: inside awaitEachGesture, `withTimeout` resolves to
+                    // the AwaitPointerEventScope overload, which throws
+                    // PointerEventTimeoutCancellationException (NOT the kotlinx
+                    // TimeoutCancellationException) when the deadline fires.
+                    // Catching the wrong type means LongPress never triggers.
+                    val outcome: GestureOutcome = try {
+                        withTimeout(LONG_PRESS_MS) {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes
+                                    .firstOrNull { it.id == down.id } ?: return@withTimeout GestureOutcome.Cancel
+                                if (!change.pressed) return@withTimeout GestureOutcome.Tap
+                                val total = change.position - down.position
+                                if (total.getDistance() > slop) {
+                                    return@withTimeout if (abs(total.x) > abs(total.y))
+                                        GestureOutcome.HDrag else GestureOutcome.VDrag
+                                }
+                            }
+                            @Suppress("UNREACHABLE_CODE") GestureOutcome.Cancel
                         }
-                    },
-                    onHorizontalEnd = {
-                        if (latestSeekGesture) {
-                            seekIndicator?.let { s ->
-                                onSeekTo(s.target)
-                                seekIndicator = s.copy(committed = true)
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        GestureOutcome.LongPress
+                    }
+
+                    when (outcome) {
+                        GestureOutcome.Cancel -> Unit
+                        GestureOutcome.Tap -> {
+                            if (latestSoloAudio && !latestIsSoloTarget) {
+                                // Solo audio mode: tapping a non-target cell makes
+                                // it the audio source. Force-show controls so the
+                                // ♪ 音声中 chip on this cell becomes the visual
+                                // confirmation of the switch.
+                                onActivateSolo()
+                                if (!controlsVisible) controlsVisible = true
+                            } else {
+                                controlsVisible = !controlsVisible
+                            }
+                            markInteraction()
+                        }
+                        GestureOutcome.VDrag -> {
+                            // Suppress volume drag when the gesture started in
+                            // the top-edge reservation zone — that strip is
+                            // owned by the PlayerApp swipe-down handler that
+                            // opens the TopBar. Without this guard the same
+                            // swipe drags the cell's volume to zero on its
+                            // way to revealing the bar.
+                            val downWindowY = latestCellOrigin.y + down.position.y
+                            val inTopEdge = downWindowY < TOP_EDGE_RESERVED_DP.toPx()
+                            if (inTopEdge) {
+                                // Drain the gesture to release; do nothing.
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes
+                                        .firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    change.consume()
+                                }
+                                return@awaitEachGesture
+                            }
+
+                            // Vertical drag → volume.
+                            val dragStartVolume = latestSlot.volume
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes
+                                    .firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                if (latestVolumeGesture) {
+                                    val totalDy = change.position.y - down.position.y
+                                    val cellHeight = size.height.toFloat().coerceAtLeast(1f)
+                                    val deltaVol = -totalDy / cellHeight
+                                    val newVol = (dragStartVolume + deltaVol).coerceIn(0f, 1f)
+                                    onVolumeChange(newVol)
+                                    if (latestSoloAudio && !latestIsSoloTarget) onActivateSolo()
+                                    volumeIndicator = newVol
+                                    markInteraction()
+                                }
+                                change.consume()
                             }
                         }
-                    },
-                )
+                        GestureOutcome.HDrag -> {
+                            // Horizontal drag → seek scrub. Snapshot the start
+                            // position from the player itself (not stale slot.positionMs).
+                            val dragStartPosMs = player.currentPosition
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes
+                                    .firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) {
+                                    if (latestSeekGesture) {
+                                        seekIndicator?.let { s ->
+                                            onSeekTo(s.target)
+                                            seekIndicator = s.copy(committed = true)
+                                            markInteraction()
+                                        }
+                                    }
+                                    break
+                                }
+                                if (latestSeekGesture) {
+                                    val totalDx = change.position.x - down.position.x
+                                    val cellWidth = size.width.toFloat().coerceAtLeast(1f)
+                                    val durationMs = latestSlot.durationMs.coerceAtLeast(1L)
+                                    // 1 screen width ≈ 60 s seek
+                                    val totalDeltaMs = (totalDx / cellWidth * 60_000f).toLong()
+                                    val target = (dragStartPosMs + totalDeltaMs).coerceIn(0L, durationMs)
+                                    seekIndicator = SeekIndicatorState(dragStartPosMs, target, committed = false)
+                                    markInteraction()
+                                }
+                                change.consume()
+                            }
+                        }
+                        GestureOutcome.LongPress -> {
+                            // Reorder mode. The parent owns the visual lift and
+                            // hit-testing; we just translate cell-local pointer
+                            // positions to window coordinates and forward.
+                            latestOnReorderStart()
+                            markInteraction()
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes
+                                        .firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    val windowPos = latestCellOrigin + change.position
+                                    val dragDelta = change.position - down.position
+                                    latestOnReorderMove(windowPos, dragDelta)
+                                    change.consume()
+                                }
+                            } finally {
+                                latestOnReorderEnd()
+                            }
+                        }
+                    }
+                }
             },
     ) {
         // Video surface
@@ -269,16 +428,19 @@ fun PlayerCell(
             PlayerControls(
                 slot = slot,
                 isCompact = isCompact,
-                onTogglePlay = onTogglePlay,
-                onSkip = onSkip,
-                onSeekTo = onSeekTo,
-                onPickVideo = onPickVideo,
-                onClearVideo = onClearVideo,
-                onCycleResizeMode = onCycleResizeMode,
-                onSetPlaybackSpeed = onSetPlaybackSpeed,
-                onSetLoopA = onSetLoopA,
-                onSetLoopB = onSetLoopB,
-                onClearLoop = onClearLoop,
+                // Wrap each callback so any control press / drag resets the
+                // 3-second auto-hide timer rather than letting it expire while
+                // the user is actively interacting with the overlay.
+                onTogglePlay = { onTogglePlay(); markInteraction() },
+                onSkip = { ms -> onSkip(ms); markInteraction() },
+                onSeekTo = { pos -> onSeekTo(pos); markInteraction() },
+                onPickVideo = { onPickVideo(); markInteraction() },
+                onClearVideo = { onClearVideo(); markInteraction() },
+                onCycleResizeMode = { onCycleResizeMode(); markInteraction() },
+                onSetPlaybackSpeed = { s -> onSetPlaybackSpeed(s); markInteraction() },
+                onSetLoopA = { onSetLoopA(); markInteraction() },
+                onSetLoopB = { onSetLoopB(); markInteraction() },
+                onClearLoop = { onClearLoop(); markInteraction() },
             )
         }
 
@@ -308,48 +470,3 @@ private data class SeekIndicatorState(
     val target: Long,
     val committed: Boolean,
 )
-
-/**
- * Distinguishes vertical-drag (volume) vs horizontal-drag (seek) per gesture.
- *
- * Reports total accumulated deltas from the gesture start (NOT per-frame deltas) so
- * callers can compute absolute targets without accumulation drift. `onVerticalStart`
- * / `onHorizontalStart` fire once per gesture, when the orientation is first decided.
- *
- * Allows consumed downs so taps captured by overlay buttons don't break drag detection.
- */
-private suspend fun PointerInputScope.detectDirectionalDrag(
-    onVerticalStart: () -> Unit,
-    onVerticalDelta: (totalDy: Float) -> Unit,
-    onHorizontalStart: () -> Unit,
-    onHorizontalDelta: (totalDx: Float) -> Unit,
-    onHorizontalEnd: () -> Unit,
-) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val pointerId = down.id
-        var dragOrient = 0 // 0 undetermined, 1 = horizontal, 2 = vertical
-        val startPos = down.position
-        val slop = viewConfiguration.touchSlop
-
-        while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Main)
-            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-            if (!change.pressed) {
-                if (dragOrient == 1) onHorizontalEnd()
-                break
-            }
-            val total: Offset = change.position - startPos
-            if (dragOrient == 0) {
-                if (total.getDistance() > slop) {
-                    dragOrient = if (abs(total.x) > abs(total.y)) 1 else 2
-                    if (dragOrient == 1) onHorizontalStart() else onVerticalStart()
-                }
-            }
-            if (dragOrient != 0) {
-                if (dragOrient == 1) onHorizontalDelta(total.x) else onVerticalDelta(total.y)
-                change.consume()
-            }
-        }
-    }
-}

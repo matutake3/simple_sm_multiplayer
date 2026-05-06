@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
@@ -55,8 +54,8 @@ fun TopBar(
     layoutMode: Int,
     soloAudio: Boolean,
     syncPlayback: Boolean,
-    onPlayAll: () -> Unit,
-    onPauseAll: () -> Unit,
+    isAnyPlaying: Boolean,
+    onTogglePlayPause: () -> Unit,
     onClearAll: () -> Unit,
     onLayoutChange: (Int) -> Unit,
     onToggleSolo: () -> Unit,
@@ -83,29 +82,33 @@ fun TopBar(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // Row 1: every control except the close button.
+        // Cluster all items in the centre by sandwiching them between two
+        // weight(1f) spacers — the leftover horizontal space splits evenly
+        // into the left and right margins. This keeps the rightmost ⚙
+        // Settings button safely away from the system gesture strip on the
+        // right edge in landscape, and centres the row in portrait too.
         Row(
             modifier = Modifier.fillMaxWidth().height(36.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            Spacer(Modifier.weight(1f))
+
+            // Combined play / pause toggle — icon flips based on whether any
+            // slot is currently playing. Single button keeps the row uncluttered.
             BarButton(
-                icon = Icons.Filled.PlayArrow,
-                label = stringResource(R.string.action_play_all).takeIf { showLabels },
-                onClick = onPlayAll,
+                icon = if (isAnyPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                label = if (showLabels) {
+                    if (isAnyPlaying) stringResource(R.string.action_pause_all)
+                    else stringResource(R.string.action_play_all)
+                } else null,
+                onClick = onTogglePlayPause,
             )
-            Spacer(Modifier.width(4.dp))
-            BarButton(
-                icon = Icons.Filled.Pause,
-                label = stringResource(R.string.action_pause_all).takeIf { showLabels },
-                onClick = onPauseAll,
-            )
-            Spacer(Modifier.width(4.dp))
             BarButton(
                 icon = Icons.Filled.DeleteSweep,
                 label = stringResource(R.string.action_clear_all).takeIf { showLabels },
                 onClick = onClearAll,
             )
-
-            Spacer(Modifier.width(8.dp))
 
             if (isPortrait) {
                 LayoutDropdownButton(
@@ -130,61 +133,48 @@ fun TopBar(
                 }
             }
 
-            Spacer(Modifier.width(8.dp))
-
             BarButton(
                 icon = if (syncPlayback) Icons.Filled.Sync else Icons.Filled.LinkOff,
-                label = if (showLabels) {
-                    if (syncPlayback) stringResource(R.string.action_sync_on)
-                    else stringResource(R.string.action_sync_off)
-                } else null,
+                label = stringResource(R.string.action_sync_playback).takeIf { showLabels },
                 onClick = onToggleSync,
                 highlight = syncPlayback,
             )
-            Spacer(Modifier.width(4.dp))
             BarButton(
                 // Single icon for both states — highlight indicates ON.
                 // Headphones = "this is the audio source you're listening to".
                 // Avoids the previous VolumeOff/VolumeUp pair which read as
                 // "muted" on small screens.
                 icon = Icons.Filled.Headphones,
-                label = if (showLabels) {
-                    if (soloAudio) stringResource(R.string.action_solo_audio_on)
-                    else stringResource(R.string.action_solo_audio_off)
-                } else null,
+                label = stringResource(R.string.action_solo_audio).takeIf { showLabels },
                 onClick = onToggleSolo,
                 highlight = soloAudio,
             )
-            Spacer(Modifier.width(4.dp))
             BarButton(icon = Icons.Filled.Bookmarks, label = null, onClick = onOpenPresets)
-            Spacer(Modifier.width(4.dp))
             // Lock button is placed BEFORE Settings so that ⚙ Settings remains
-            // the rightmost button on Row 1 (per the user's design intent —
-            // Settings must always sit at the inner-rightmost position, with
-            // empty trailing space to avoid the system gesture strip).
+            // the rightmost button on Row 1.
             BarButton(icon = Icons.Filled.Lock, label = null, onClick = onLock)
-            Spacer(Modifier.width(4.dp))
             BarButton(icon = Icons.Filled.Settings, label = null, onClick = onOpenSettings)
 
-            // Trailing flex space so any leftover width sits on the right —
-            // keeps left-alignment of the control row consistent across widths.
             Spacer(Modifier.weight(1f))
         }
 
-        // Row 2: only the close button, centred. (No other elements here —
-        // anything additional would either offset the close button or land
-        // on top of the system gesture area, neither of which is desired.)
+        // Row 2: full-width tappable bar to close the TopBar — anywhere on
+        // the bar acts as the close affordance, with the chevron centred for
+        // visual reinforcement.
         Row(
-            modifier = Modifier.fillMaxWidth().height(32.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .clickable(onClick = onClose),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Spacer(Modifier.weight(1f))
-            BarButton(
-                icon = Icons.Filled.KeyboardArrowUp,
-                label = null,
-                onClick = onClose,
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(Modifier.weight(1f))
         }
     }
 }

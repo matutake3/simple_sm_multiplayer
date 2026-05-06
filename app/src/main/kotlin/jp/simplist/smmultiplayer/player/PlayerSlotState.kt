@@ -14,6 +14,13 @@ import android.net.Uri
  */
 data class PlayerSlotState(
     val index: Int,
+    /**
+     * Index into `PlayerViewModel.players` of the underlying ExoPlayer that
+     * drives this UI slot. Defaults to `index` (identity mapping). Drag-and-
+     * drop reorder swaps this between two slots so the players stay running
+     * with their current MediaItem rather than re-loading on every shuffle.
+     */
+    val playerIndex: Int = index,
     val uri: Uri? = null,
     val title: String? = null,
     val isPlaying: Boolean = false,

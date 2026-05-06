@@ -10,10 +10,8 @@
     <string name="action_layout_2">2画面</string>
     <string name="action_layout_3">3画面</string>
     <string name="action_layout_4">4画面</string>
-    <string name="action_solo_audio_on">ソロ音声: ON</string>
-    <string name="action_solo_audio_off">ソロ音声: OFF</string>
-    <string name="action_sync_on">同期再生: ON</string>
-    <string name="action_sync_off">同期再生: OFF</string>
+    <string name="action_solo_audio">ソロ音声</string>
+    <string name="action_sync_playback">同期再生</string>
     <string name="action_settings">設定</string>
     <string name="action_presets">プリセット</string>
 

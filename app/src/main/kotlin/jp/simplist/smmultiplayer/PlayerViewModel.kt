@@ -77,7 +77,26 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
-    fun getPlayer(index: Int): ExoPlayer = players[index]
+    /**
+     * Resolve the underlying ExoPlayer driving the given UI slot. Honours
+     * [PlayerSlotState.playerIndex] so that drag-and-drop reorder
+     * (which swaps the playerIndex between two slots) is an instant remap
+     * rather than a costly URI reload.
+     */
+    fun getPlayer(slotIndex: Int): ExoPlayer =
+        players[_slots.value[slotIndex].playerIndex]
+
+    /** Same lookup as [getPlayer] but used internally where intent is clearer. */
+    private fun playerOf(slotIndex: Int): ExoPlayer =
+        players[_slots.value[slotIndex].playerIndex]
+
+    /**
+     * Reverse map: which slot does player [pIdx] currently drive? Used by
+     * ExoPlayer listeners that fire by player identity but need to update
+     * the corresponding slot's UI state.
+     */
+    private fun slotForPlayer(pIdx: Int): Int =
+        _slots.value.indexOfFirst { it.playerIndex == pIdx }
 
     /**
      * State for the MediaCodec-release optimisation. When a slot becomes
@@ -144,16 +163,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
-        // Player listeners → state
-        players.forEachIndexed { idx, player ->
+        // Player listeners → state. Listeners fire keyed by *player* index;
+        // we translate to the current *slot* index via slotForPlayer() so
+        // post-swap reorders update the correct UI slot.
+        players.forEachIndexed { pIdx, player ->
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    updateSlot(idx) { it.copy(isPlaying = isPlaying) }
+                    val sIdx = slotForPlayer(pIdx)
+                    if (sIdx >= 0) updateSlot(sIdx) { it.copy(isPlaying = isPlaying) }
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_READY) {
-                        updateSlot(idx) {
+                        val sIdx = slotForPlayer(pIdx)
+                        if (sIdx >= 0) updateSlot(sIdx) {
                             it.copy(
                                 durationMs = player.duration.coerceAtLeast(0L),
                                 isReady = true,
@@ -166,12 +189,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun onPlayerError(error: PlaybackException) {
                     // Surface the error in logcat instead of crashing the app.
+                    val sIdx = slotForPlayer(pIdx)
                     Log.e(
                         "PlayerViewModel",
-                        "Slot $idx playback error (${error.errorCodeName})",
+                        "Player $pIdx (slot $sIdx) playback error (${error.errorCodeName})",
                         error,
                     )
-                    updateSlot(idx) { it.copy(isPlaying = false, isReady = false) }
+                    if (sIdx >= 0) {
+                        updateSlot(sIdx) { it.copy(isPlaying = false, isReady = false) }
+                    }
                 }
             })
         }
@@ -195,7 +221,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (s.speed != 1f) {
                     updateSlot(i) { it.copy(playbackSpeed = s.speed) }
                     runCatching {
-                        players[i].playbackParameters = PlaybackParameters(s.speed)
+                        playerOf(i).playbackParameters = PlaybackParameters(s.speed)
                     }
                 }
                 if (!s.uri.isNullOrEmpty()) {
@@ -214,7 +240,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     if (i < mode) {
                         ensurePrepared(i)
                     } else {
-                        players[i].pause()
+                        playerOf(i).pause()
                         stopAndCache(i)
                     }
                 }
@@ -249,7 +275,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     } else {
                         slot.volume
                     }
-                    players[slot.index].volume = effective.coerceIn(0f, 1f)
+                    // Volume is applied to whichever player is currently
+                    // driving this slot (post-reorder this may differ from
+                    // slot.index).
+                    players[slot.playerIndex].volume = effective.coerceIn(0f, 1f)
                 }
             }
         }
@@ -269,16 +298,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     var dirty = false
                     for (i in 0 until SLOT_COUNT) {
                         if (i < mode && !isStopped[i]) {
-                            val newPos = players[i].currentPosition
+                            val slot = next[i]
+                            val player = players[slot.playerIndex]
+                            val newPos = player.currentPosition
                             // A/B-loop boundary: if past B, jump back to A.
                             // This must run regardless of controls overlay
                             // visibility — the loop should keep working even
                             // when the user has dismissed the cell controls.
-                            val slot = next[i]
                             val a = slot.loopAMs
                             val b = slot.loopBMs
                             if (slot.loopEnabled && a != null && b != null && a < b && newPos >= b) {
-                                players[i].seekTo(a)
+                                player.seekTo(a)
                                 next[i] = slot.copy(positionMs = a)
                                 dirty = true
                             } else if (visibleControlsByIndex[i] && slot.positionMs != newPos) {
@@ -296,7 +326,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setVideoUri(slotIndex: Int, uri: Uri, persist: Boolean = true) {
-        val player = players[slotIndex]
+        val player = playerOf(slotIndex)
         runCatching {
             player.setMediaItem(MediaItem.fromUri(uri))
             player.prepare()
@@ -332,7 +362,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearVideo(slotIndex: Int) {
-        val player = players[slotIndex]
+        // Preserve the post-reorder playerIndex assignment so that clearing
+        // a swapped slot doesn't undo the visual mapping.
+        val pIdx = _slots.value[slotIndex].playerIndex
+        val player = players[pIdx]
         player.stop()
         player.clearMediaItems()
         // Reset playback parameters to default so a fresh video doesn't
@@ -340,7 +373,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { player.playbackParameters = PlaybackParameters(1f) }
         isStopped[slotIndex] = false
         cachedPositions[slotIndex] = 0L
-        updateSlot(slotIndex) { PlayerSlotState(index = slotIndex) }
+        updateSlot(slotIndex) {
+            PlayerSlotState(index = slotIndex, playerIndex = pIdx)
+        }
         viewModelScope.launch {
             repo.setUri(slotIndex, null)
             repo.setPlaybackSpeed(slotIndex, 1f)
@@ -353,13 +388,65 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Swap the contents of two slots. Implemented as an instant remap of
+     * which underlying ExoPlayer drives each slot — the players stay
+     * running with their current MediaItem, so no codec teardown / rebuffer
+     * happens. The *visible* (`index`) field of each slot is preserved so
+     * UI position stays anchored; everything else (uri / title / position /
+     * volume / resize / speed / loop / isPlaying / playerIndex / etc.) is
+     * exchanged.
+     *
+     * Persisted per-slot settings (URI, resizeMode, playbackSpeed) are
+     * synced to the repo so app restart preserves the new arrangement.
+     *
+     * No-op when i == j or either index is out of range.
+     */
+    fun swapSlots(i: Int, j: Int) {
+        if (i == j || i !in 0 until SLOT_COUNT || j !in 0 until SLOT_COUNT) return
+        val list = _slots.value
+        val a = list[i]
+        val b = list[j]
+        // Slot's `index` field stays equal to its position in the list.
+        // Everything else (including playerIndex) crosses over.
+        val newA = b.copy(index = a.index)
+        val newB = a.copy(index = b.index)
+        val updated = list.toMutableList().apply {
+            this[i] = newA
+            this[j] = newB
+        }
+        _slots.value = updated
+
+        // The cached "stopped" / position state is keyed by slot position,
+        // and after the swap the URI (and therefore which player should be
+        // driving that position) has moved. Swap those entries too so
+        // subsequent stopAndCache / ensurePrepared cycles act on the right
+        // values for each slot.
+        val cachedI = cachedPositions[i]
+        cachedPositions[i] = cachedPositions[j]
+        cachedPositions[j] = cachedI
+        val stoppedI = isStopped[i]
+        isStopped[i] = isStopped[j]
+        isStopped[j] = stoppedI
+
+        // Persist per-slot fields so app restart sees the new layout.
+        viewModelScope.launch {
+            repo.setUri(i, newA.uri?.toString())
+            repo.setUri(j, newB.uri?.toString())
+            repo.setResizeMode(i, newA.resizeMode)
+            repo.setResizeMode(j, newB.resizeMode)
+            repo.setPlaybackSpeed(i, newA.playbackSpeed)
+            repo.setPlaybackSpeed(j, newB.playbackSpeed)
+        }
+    }
+
+    /**
      * Tear down the MediaCodec instance for a hidden slot to free memory,
      * remembering the playback position so it can be restored on re-show.
      * No-op if the slot has no media or is already stopped.
      */
     private fun stopAndCache(idx: Int) {
         if (isStopped[idx]) return
-        val player = players[idx]
+        val player = playerOf(idx)
         if (_slots.value[idx].uri == null) {
             // No media to remember. Just stop to be safe.
             runCatching { player.stop() }
@@ -384,7 +471,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             isStopped[idx] = false
             return
         }
-        val player = players[idx]
+        val player = playerOf(idx)
         runCatching {
             // Pass the cached position into the MediaItem so prepare resumes
             // there directly instead of starting at 0 and seeking afterwards.
@@ -407,19 +494,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             // Refresh the seekbar immediately on open so the user sees the
             // current position rather than the last value from when the
             // controls were last visible.
-            updateSlot(idx) { it.copy(positionMs = players[idx].currentPosition) }
+            updateSlot(idx) { it.copy(positionMs = playerOf(idx).currentPosition) }
         }
     }
 
     fun togglePlay(slotIndex: Int) {
-        val p = players[slotIndex]
+        val p = playerOf(slotIndex)
         val nowPlaying = p.isPlaying
         if (syncPlayback.value) {
             // Sync mode: ALL visible slots toggle together based on the
             // tapped slot's current state.
             val mode = layoutMode.value
             for (i in 0 until mode) {
-                val pp = players[i]
+                val pp = playerOf(i)
                 if (_slots.value[i].uri == null) continue
                 if (nowPlaying) pp.pause() else pp.play()
             }
@@ -431,12 +518,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun playAll() {
         val mode = layoutMode.value
         for (i in 0 until mode) {
-            if (_slots.value[i].uri != null) players[i].play()
+            if (_slots.value[i].uri != null) playerOf(i).play()
         }
     }
 
     fun pauseAll() {
-        for (i in 0 until SLOT_COUNT) players[i].pause()
+        for (i in 0 until SLOT_COUNT) playerOf(i).pause()
     }
 
     fun seekTo(slotIndex: Int, positionMs: Long) {
@@ -445,13 +532,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             // (clamped per-slot so shorter videos cap at their own end).
             val mode = layoutMode.value
             for (i in 0 until mode) {
-                val pp = players[i]
+                val pp = playerOf(i)
                 val target = positionMs.coerceIn(0L, pp.duration.coerceAtLeast(0L))
                 pp.seekTo(target)
                 updateSlot(i) { it.copy(positionMs = target) }
             }
         } else {
-            val p = players[slotIndex]
+            val p = playerOf(slotIndex)
             val target = positionMs.coerceIn(0L, p.duration.coerceAtLeast(0L))
             p.seekTo(target)
             updateSlot(slotIndex) { it.copy(positionMs = target) }
@@ -464,14 +551,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             // position, preserving any pre-existing offsets between slots.
             val mode = layoutMode.value
             for (i in 0 until mode) {
-                val pp = players[i]
+                val pp = playerOf(i)
                 val target = (pp.currentPosition + deltaMs)
                     .coerceIn(0L, pp.duration.coerceAtLeast(0L))
                 pp.seekTo(target)
                 updateSlot(i) { it.copy(positionMs = target) }
             }
         } else {
-            val p = players[slotIndex]
+            val p = playerOf(slotIndex)
             val target = (p.currentPosition + deltaMs)
                 .coerceIn(0L, p.duration.coerceAtLeast(0L))
             p.seekTo(target)
@@ -492,7 +579,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setLoopA(slotIndex: Int) {
         if (slotIndex !in 0 until SLOT_COUNT) return
-        val pos = players[slotIndex].currentPosition.coerceAtLeast(0L)
+        val pos = playerOf(slotIndex).currentPosition.coerceAtLeast(0L)
         updateSlot(slotIndex) {
             val b = it.loopBMs
             val valid = b != null && pos < b
@@ -503,7 +590,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** Set the slot's B point to its current playback position. See [setLoopA]. */
     fun setLoopB(slotIndex: Int) {
         if (slotIndex !in 0 until SLOT_COUNT) return
-        val pos = players[slotIndex].currentPosition.coerceAtLeast(0L)
+        val pos = playerOf(slotIndex).currentPosition.coerceAtLeast(0L)
         updateSlot(slotIndex) {
             val a = it.loopAMs
             val valid = a != null && a < pos
@@ -535,7 +622,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         targets.forEach { i ->
             updateSlot(i) { it.copy(playbackSpeed = coerced) }
             runCatching {
-                players[i].playbackParameters = PlaybackParameters(coerced)
+                playerOf(i).playbackParameters = PlaybackParameters(coerced)
             }
         }
         viewModelScope.launch {
@@ -608,14 +695,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun loadPreset(id: String) {
         val preset = presets.value.firstOrNull { it.id == id } ?: return
         viewModelScope.launch {
-            // First wipe each slot so the codec resources are released and any
-            // cached "stopped" state is reset.
+            // First wipe each player so the codec resources are released and any
+            // cached "stopped" state is reset. Iterate by *player* index here
+            // (as opposed to slot index) so reorder mappings don't leave
+            // stragglers behind.
             for (i in 0 until SLOT_COUNT) {
                 players[i].stop()
                 players[i].clearMediaItems()
                 isStopped[i] = false
                 cachedPositions[i] = 0L
             }
+            // Reset the slot ↔ player mapping back to identity. A preset is
+            // a logical layout, not a runtime mapping, so loading one starts
+            // fresh: slot N is driven by player N.
+            _slots.value = _slots.value.mapIndexed { i, s -> s.copy(playerIndex = i) }
             // Persist top-level settings.
             repo.setLayoutMode(preset.layoutMode)
             repo.setSoloAudio(preset.soloAudio)
@@ -636,7 +729,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 runCatching {
-                    players[i].playbackParameters = PlaybackParameters(ps.playbackSpeed)
+                    playerOf(i).playbackParameters = PlaybackParameters(ps.playbackSpeed)
                 }
                 if (!ps.uri.isNullOrEmpty()) {
                     runCatching { setVideoUri(i, Uri.parse(ps.uri), persist = true) }

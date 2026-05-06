@@ -10,7 +10,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,9 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.simplist.smmultiplayer.PlayerViewModel
 import jp.simplist.smmultiplayer.R
@@ -48,6 +52,7 @@ import jp.simplist.smmultiplayer.billing.BillingManager
 import jp.simplist.smmultiplayer.trial.TrialManager
 import jp.simplist.smmultiplayer.ui.theme.PlayerBg
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 
 private const val TOP_BAR_AUTO_HIDE_MS = 5_000L
 
@@ -82,6 +87,7 @@ fun PlayerApp(
     val seekGesture by viewModel.seekGesture.collectAsStateWithLifecycle()
     val disableVolumeKeys by viewModel.disableVolumeKeys.collectAsStateWithLifecycle()
     val locked by viewModel.locked.collectAsStateWithLifecycle()
+    val anyPlaying by viewModel.anyPlaying.collectAsStateWithLifecycle()
     // Read-by-value inside long-lived pointerInput coroutines.
     val lockedState by rememberUpdatedState(locked)
 
@@ -101,6 +107,20 @@ fun PlayerApp(
         if (topBarVisible) {
             delay(TOP_BAR_AUTO_HIDE_MS)
             topBarVisible = false
+        }
+    }
+
+    // The "swipe-down-from-top" gesture that reveals our TopBar is the same
+    // gesture the OS uses to reveal the status bar (BEHAVIOR_SHOW_TRANSIENT_
+    // BARS_BY_SWIPE). Re-issue hide() the moment our TopBar opens so the
+    // status / navigation bars don't end up sitting on top of it. The same
+    // hide() also pulls the right-edge gesture nav strip back out of view.
+    val rootView = LocalView.current
+    LaunchedEffect(topBarVisible) {
+        if (topBarVisible) {
+            val window = (rootView.context as? Activity)?.window ?: return@LaunchedEffect
+            WindowInsetsControllerCompat(window, rootView)
+                .hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -177,25 +197,54 @@ fun PlayerApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
-                        // Swallow every tap / drag gesture on screen.
-                        // Long-press is the explicit unlock affordance.
-                        detectTapGestures(
-                            onLongPress = { viewModel.setLocked(false) },
-                            onTap = { /* swallowed */ },
-                            onDoubleTap = { /* swallowed */ },
-                            onPress = { /* swallowed */ },
-                        )
+                        // Custom long-press detector with a 1.5 s threshold —
+                        // long enough that an accidental finger rest on the
+                        // screen does not unlock. (Compose's built-in
+                        // detectTapGestures uses ViewConfiguration's
+                        // longPressTimeout, ~400-500 ms, which was firing
+                        // unintentionally and silently releasing the lock.)
+                        // Movement past touch slop also cancels — the user
+                        // must press *and hold still*.
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val slop = viewConfiguration.touchSlop
+                            // NOTE: inside awaitEachGesture, `withTimeout` is
+                            // the AwaitPointerEventScope overload — it throws
+                            // PointerEventTimeoutCancellationException (not
+                            // the kotlinx TimeoutCancellationException) when
+                            // the deadline fires. Catching the wrong type
+                            // means the timeout silently propagates and the
+                            // unlock branch never runs.
+                            val held = try {
+                                withTimeout(1_500L) {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes
+                                            .firstOrNull { it.id == down.id } ?: return@withTimeout false
+                                        if (!change.pressed) return@withTimeout false
+                                        if ((change.position - down.position).getDistance() > slop) {
+                                            return@withTimeout false
+                                        }
+                                        change.consume()
+                                    }
+                                    @Suppress("UNREACHABLE_CODE") false
+                                }
+                            } catch (_: PointerEventTimeoutCancellationException) {
+                                true
+                            }
+                            if (held) viewModel.setLocked(false)
+                        }
                     },
             ) {
-                // Lock indicator pill in the top-right corner so the user
-                // sees at a glance that the screen is locked.
+                // Lock indicator pill at the bottom-centre — chosen over the
+                // top-right corner so the pill never overlaps a video while
+                // still being unmistakable as the unlock affordance.
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
-                        .padding(12.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
                         .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                 ) {
                     androidx.compose.foundation.layout.Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -233,8 +282,11 @@ fun PlayerApp(
                 layoutMode = layoutMode,
                 soloAudio = soloAudio,
                 syncPlayback = syncPlayback,
-                onPlayAll = { viewModel.playAll(); touch() },
-                onPauseAll = { viewModel.pauseAll(); touch() },
+                isAnyPlaying = anyPlaying,
+                onTogglePlayPause = {
+                    if (anyPlaying) viewModel.pauseAll() else viewModel.playAll()
+                    touch()
+                },
                 onClearAll = { clearAllConfirmOpen = true; touch() },
                 onLayoutChange = { viewModel.setLayoutMode(it); touch() },
                 onToggleSolo = { viewModel.toggleSoloAudio(); touch() },
