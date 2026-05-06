@@ -6,16 +6,16 @@
     android:viewportHeight="108">
     <!-- 2x2 grid of small frames suggesting "multi player" -->
     <path
-        android:fillColor="#739eb3"
+        android:fillColor="#7DD3FC"
         android:pathData="M30,30h22v22h-22z" />
     <path
-        android:fillColor="#7baa94"
+        android:fillColor="#A7F3D0"
         android:pathData="M56,30h22v22h-22z" />
     <path
-        android:fillColor="#c7b16b"
+        android:fillColor="#FCD34D"
         android:pathData="M30,56h22v22h-22z" />
     <path
-        android:fillColor="#c08a8a"
+        android:fillColor="#FCA5A5"
         android:pathData="M56,56h22v22h-22z" />
     <!-- center play triangle overlaid -->
     <path
