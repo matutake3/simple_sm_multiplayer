@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
@@ -41,8 +43,10 @@ fun TopBar(
     soloAudio: Boolean,
     onPlayAll: () -> Unit,
     onPauseAll: () -> Unit,
+    onClearAll: () -> Unit,
     onLayoutChange: (Int) -> Unit,
     onToggleSolo: () -> Unit,
+    onOpenPresets: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -69,6 +73,12 @@ fun TopBar(
             icon = Icons.Filled.Pause,
             label = stringResource(R.string.action_pause_all).takeIf { showLabels },
             onClick = onPauseAll,
+        )
+        Spacer(Modifier.width(4.dp))
+        BarButton(
+            icon = Icons.Filled.DeleteSweep,
+            label = stringResource(R.string.action_clear_all).takeIf { showLabels },
+            onClick = onClearAll,
         )
 
         Spacer(Modifier.width(12.dp))
@@ -102,6 +112,12 @@ fun TopBar(
             } else null,
             onClick = onToggleSolo,
             highlight = soloAudio,
+        )
+        Spacer(Modifier.width(4.dp))
+        BarButton(
+            icon = Icons.Filled.Bookmarks,
+            label = null,
+            onClick = onOpenPresets,
         )
         Spacer(Modifier.width(4.dp))
         BarButton(

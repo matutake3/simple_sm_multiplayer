@@ -27,9 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.simplist.smmultiplayer.PlayerViewModel
+import jp.simplist.smmultiplayer.R
 import jp.simplist.smmultiplayer.ui.theme.PlayerBg
 import kotlinx.coroutines.delay
 
@@ -47,6 +49,8 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val ctrlAlways by viewModel.controlsAlwaysVisible.collectAsStateWithLifecycle()
 
     var settingsOpen by remember { mutableStateOf(false) }
+    var presetsOpen by remember { mutableStateOf(false) }
+    var clearAllConfirmOpen by remember { mutableStateOf(false) }
     var pickerForSlot by remember { mutableStateOf<Int?>(null) }
 
     // Overlay TopBar — hidden by default; pull down from the top edge to reveal.
@@ -137,8 +141,10 @@ fun PlayerApp(viewModel: PlayerViewModel) {
                 soloAudio = soloAudio,
                 onPlayAll = { viewModel.playAll(); touch() },
                 onPauseAll = { viewModel.pauseAll(); touch() },
+                onClearAll = { clearAllConfirmOpen = true; touch() },
                 onLayoutChange = { viewModel.setLayoutMode(it); touch() },
                 onToggleSolo = { viewModel.toggleSoloAudio(); touch() },
+                onOpenPresets = { presetsOpen = true; touch() },
                 onOpenSettings = { settingsOpen = true; touch() },
                 onClose = { topBarVisible = false },
             )
@@ -154,6 +160,26 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             onShowSeekIndicator = { viewModel.setShowSeekIndicator(it) },
             onControlsAlwaysVisible = { viewModel.setControlsAlwaysVisible(it) },
             onDismiss = { settingsOpen = false },
+        )
+    }
+
+    if (clearAllConfirmOpen) {
+        ConfirmDialog(
+            title = stringResource(R.string.dialog_clear_all_title),
+            message = stringResource(R.string.dialog_clear_all_message),
+            confirmLabel = stringResource(R.string.action_clear_all),
+            onConfirm = {
+                viewModel.clearAllVideos()
+                clearAllConfirmOpen = false
+            },
+            onDismiss = { clearAllConfirmOpen = false },
+        )
+    }
+
+    if (presetsOpen) {
+        PresetsDialog(
+            viewModel = viewModel,
+            onDismiss = { presetsOpen = false },
         )
     }
 }

@@ -46,6 +46,7 @@ fun PlayerGrid(
             onActivateSolo = { viewModel.selectSoloAudioSlot(index) },
             onPickVideo = { onPickForSlot(index) },
             onClearVideo = { viewModel.clearVideo(index) },
+            onCycleResizeMode = { viewModel.cycleResizeMode(index) },
             onControlsVisibilityChange = { v -> viewModel.setControlsVisible(index, v) },
             modifier = mod,
         )

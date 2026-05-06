@@ -13,8 +13,13 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import jp.simplist.smmultiplayer.data.LayoutPreset
+import jp.simplist.smmultiplayer.data.PresetSlot
 import jp.simplist.smmultiplayer.data.SettingsRepository
+import jp.simplist.smmultiplayer.data.toJsonArray
+import jp.simplist.smmultiplayer.data.toPresetList
 import jp.simplist.smmultiplayer.player.PlayerSlotState
+import jp.simplist.smmultiplayer.player.ResizeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,6 +109,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val soloIndex: StateFlow<Int> =
         repo.soloIndex.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    val presets: StateFlow<List<LayoutPreset>> =
+        repo.presetsJson
+            .map { it.toPresetList() }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     init {
         // Player listeners → state
         players.forEachIndexed { idx, player ->
@@ -136,12 +147,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             })
         }
 
-        // Restore persisted URIs.
+        // Restore persisted URIs and resize modes.
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) {
-                (0 until SLOT_COUNT).map { repo.savedUri(it).first() }
+                (0 until SLOT_COUNT).map { i ->
+                    repo.savedUri(i).first() to repo.savedResizeMode(i).first()
+                }
             }
-            saved.forEachIndexed { i, uri ->
+            saved.forEachIndexed { i, (uri, mode) ->
+                if (mode != 0) {
+                    updateSlot(i) { it.copy(resizeMode = mode) }
+                }
                 if (!uri.isNullOrEmpty()) {
                     runCatching { setVideoUri(i, Uri.parse(uri), persist = false) }
                 }
@@ -247,6 +263,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.setUri(slotIndex, null) }
     }
 
+    /** Clear every slot's video at once. */
+    fun clearAllVideos() {
+        for (i in 0 until SLOT_COUNT) clearVideo(i)
+    }
+
     /**
      * Tear down the MediaCodec instance for a hidden slot to free memory,
      * remembering the playback position so it can be restored on re-show.
@@ -339,6 +360,96 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun setVolume(slotIndex: Int, v: Float) {
         updateSlot(slotIndex) { it.copy(volume = v.coerceIn(0f, 1f)) }
     }
+
+    /** Cycle through the available resize modes for the given slot. */
+    fun cycleResizeMode(slotIndex: Int) {
+        if (slotIndex !in 0 until SLOT_COUNT) return
+        val current = _slots.value[slotIndex].resizeMode
+        val ordered = ResizeMode.ALL
+        val nextIdx = (ordered.indexOf(current).takeIf { it >= 0 } ?: 0) + 1
+        val next = ordered[nextIdx % ordered.size]
+        updateSlot(slotIndex) { it.copy(resizeMode = next) }
+        viewModelScope.launch { repo.setResizeMode(slotIndex, next) }
+    }
+
+    /* ---------- Layout presets ---------- */
+
+    /** Snapshot the current player setup into a new preset. */
+    fun savePreset(name: String) {
+        val cur = _slots.value
+        val preset = LayoutPreset(
+            id = LayoutPreset.newId(),
+            name = name.trim().ifEmpty { defaultPresetName() },
+            layoutMode = layoutMode.value,
+            soloAudio = soloAudio.value,
+            soloIndex = soloIndex.value,
+            slots = List(SLOT_COUNT) { i ->
+                val s = cur[i]
+                PresetSlot(
+                    uri = s.uri?.toString(),
+                    title = s.title,
+                    volume = s.volume,
+                    resizeMode = s.resizeMode,
+                )
+            },
+        )
+        viewModelScope.launch {
+            val updated = presets.value + preset
+            repo.setPresetsJson(updated.toJsonArray().toString())
+        }
+    }
+
+    fun deletePreset(id: String) {
+        viewModelScope.launch {
+            val updated = presets.value.filterNot { it.id == id }
+            repo.setPresetsJson(updated.toJsonArray().toString())
+        }
+    }
+
+    /**
+     * Apply a preset: clear current slots, restore each slot's URI / volume /
+     * resize mode, and apply the layout / solo-audio settings.
+     */
+    fun loadPreset(id: String) {
+        val preset = presets.value.firstOrNull { it.id == id } ?: return
+        viewModelScope.launch {
+            // First wipe each slot so the codec resources are released and any
+            // cached "stopped" state is reset.
+            for (i in 0 until SLOT_COUNT) {
+                players[i].stop()
+                players[i].clearMediaItems()
+                isStopped[i] = false
+                cachedPositions[i] = 0L
+            }
+            // Persist top-level settings.
+            repo.setLayoutMode(preset.layoutMode)
+            repo.setSoloAudio(preset.soloAudio)
+            repo.setSoloIndex(preset.soloIndex)
+            // Per-slot.
+            preset.slots.forEachIndexed { i, ps ->
+                repo.setResizeMode(i, ps.resizeMode)
+                updateSlot(i) {
+                    it.copy(
+                        volume = ps.volume,
+                        resizeMode = ps.resizeMode,
+                        title = ps.title,
+                        durationMs = 0L,
+                        positionMs = 0L,
+                        isReady = false,
+                    )
+                }
+                if (!ps.uri.isNullOrEmpty()) {
+                    runCatching { setVideoUri(i, Uri.parse(ps.uri), persist = true) }
+                } else {
+                    repo.setUri(i, null)
+                    updateSlot(i) { it.copy(uri = null, title = null) }
+                }
+            }
+        }
+    }
+
+    /** Default name for a freshly created preset, like "プリセット 3". */
+    fun defaultPresetName(): String = "プリセット ${presets.value.size + 1}"
 
     fun setLayoutMode(n: Int) {
         viewModelScope.launch { repo.setLayoutMode(n) }

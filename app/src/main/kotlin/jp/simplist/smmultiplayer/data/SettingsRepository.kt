@@ -22,7 +22,9 @@ class SettingsRepository(context: Context) {
     private val keyLayoutMode = intPreferencesKey("layout_mode")
     private val keySoloAudio = booleanPreferencesKey("solo_audio")
     private val keySoloIndex = intPreferencesKey("solo_index")
+    private val keyPresets = stringPreferencesKey("layout_presets_json")
     private fun keyUri(idx: Int) = stringPreferencesKey("uri_$idx")
+    private fun keyResizeMode(idx: Int) = intPreferencesKey("resize_mode_$idx")
 
     val showVolumeIndicator: Flow<Boolean> =
         ds.data.map { it[keyVolumeIndicator] ?: true }
@@ -40,6 +42,12 @@ class SettingsRepository(context: Context) {
     fun savedUri(idx: Int): Flow<String?> =
         ds.data.map { it[keyUri(idx)] }
 
+    fun savedResizeMode(idx: Int): Flow<Int> =
+        ds.data.map { it[keyResizeMode(idx)] ?: 0 }
+
+    val presetsJson: Flow<String> =
+        ds.data.map { it[keyPresets] ?: "[]" }
+
     suspend fun setShowVolumeIndicator(v: Boolean) { ds.edit { it[keyVolumeIndicator] = v } }
     suspend fun setShowSeekIndicator(v: Boolean) { ds.edit { it[keySeekIndicator] = v } }
     suspend fun setControlsAlwaysVisible(v: Boolean) { ds.edit { it[keyControlsAlwaysVisible] = v } }
@@ -50,5 +58,13 @@ class SettingsRepository(context: Context) {
         ds.edit { prefs ->
             if (uri == null) prefs.remove(keyUri(idx)) else prefs[keyUri(idx)] = uri
         }
+    }
+
+    suspend fun setResizeMode(idx: Int, mode: Int) {
+        ds.edit { it[keyResizeMode(idx)] = mode }
+    }
+
+    suspend fun setPresetsJson(json: String) {
+        ds.edit { it[keyPresets] = json }
     }
 }

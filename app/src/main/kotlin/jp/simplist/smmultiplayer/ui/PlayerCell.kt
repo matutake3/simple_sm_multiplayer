@@ -1,5 +1,6 @@
 package jp.simplist.smmultiplayer.ui
 
+import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -32,6 +33,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -72,6 +74,7 @@ fun PlayerCell(
     onActivateSolo: () -> Unit,
     onPickVideo: () -> Unit,
     onClearVideo: () -> Unit,
+    onCycleResizeMode: () -> Unit,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -159,19 +162,32 @@ fun PlayerCell(
         // Video surface
         if (hasVideo) {
             AndroidView(
+                // Inflate from XML so we can set surface_type="texture_view".
+                // TextureView clips to parent bounds correctly even when
+                // AspectRatioFrameLayout's ZOOM mode resizes the view past the
+                // cell's bounds; the default SurfaceView would let video
+                // bleed into adjacent cells.
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                    }
+                    val view = LayoutInflater.from(ctx)
+                        .inflate(R.layout.exo_player_cell_view, null) as PlayerView
+                    view.useController = false
+                    view.setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    view.layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                    view.resizeMode = slot.resizeMode
+                    view
                 },
-                update = { v -> v.player = player },
+                update = { v ->
+                    v.player = player
+                    if (v.resizeMode != slot.resizeMode) v.resizeMode = slot.resizeMode
+                },
                 onRelease = { v -> v.player = null },
-                modifier = Modifier.fillMaxSize(),
+                // Belt-and-suspenders: also clip at the Compose layer so any
+                // residual overflow in unusual resize-mode combinations stays
+                // within the cell.
+                modifier = Modifier.fillMaxSize().clipToBounds(),
             )
         } else {
             Column(
@@ -237,6 +253,7 @@ fun PlayerCell(
                 onSeekTo = onSeekTo,
                 onPickVideo = onPickVideo,
                 onClearVideo = onClearVideo,
+                onCycleResizeMode = onCycleResizeMode,
             )
         }
 

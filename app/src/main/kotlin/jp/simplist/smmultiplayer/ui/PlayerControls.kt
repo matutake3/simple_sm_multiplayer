@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.simplist.smmultiplayer.player.PlayerSlotState
+import jp.simplist.smmultiplayer.player.ResizeMode
 import jp.simplist.smmultiplayer.ui.theme.Accent
 import jp.simplist.smmultiplayer.ui.theme.OverlayScrim
 import jp.simplist.smmultiplayer.ui.theme.OverlayScrimSoft
@@ -53,6 +57,7 @@ fun PlayerControls(
     onSeekTo: (Long) -> Unit,
     onPickVideo: () -> Unit,
     onClearVideo: () -> Unit,
+    onCycleResizeMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize().background(OverlayScrimSoft)) {
@@ -71,6 +76,14 @@ fun PlayerControls(
                 maxLines = 1,
                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
             )
+            IconButton(onClick = onCycleResizeMode, modifier = Modifier.size(32.dp)) {
+                val (icon, desc) = when (slot.resizeMode) {
+                    ResizeMode.ZOOM -> Icons.Filled.Fullscreen to "ZOOM"
+                    ResizeMode.FILL -> Icons.Filled.CropFree to "FILL"
+                    else -> Icons.Filled.AspectRatio to "FIT"
+                }
+                Icon(icon, desc, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
             IconButton(onClick = onPickVideo, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Filled.SwapHoriz, "変更", tint = Color.White, modifier = Modifier.size(20.dp))
             }
