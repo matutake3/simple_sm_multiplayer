@@ -29,12 +29,21 @@ fun SettingsDialog(
     showSeekIndicator: Boolean,
     controlsAlwaysVisible: Boolean,
     fastSeek: Boolean,
+    syncSpeed: Boolean,
+    autoLoop: Boolean,
+    volumeGesture: Boolean,
+    seekGesture: Boolean,
     onShowVolumeIndicator: (Boolean) -> Unit,
     onShowSeekIndicator: (Boolean) -> Unit,
     onControlsAlwaysVisible: (Boolean) -> Unit,
     onFastSeek: (Boolean) -> Unit,
+    onSyncSpeed: (Boolean) -> Unit,
+    onAutoLoop: (Boolean) -> Unit,
+    onVolumeGesture: (Boolean) -> Unit,
+    onSeekGesture: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val scrollState = rememberScrollState()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.title_settings)) },
@@ -43,7 +52,8 @@ fun SettingsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState)
+                    .simpleVerticalScrollbar(scrollState),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SettingRow(
@@ -63,6 +73,30 @@ fun SettingsDialog(
                     summary = stringResource(R.string.setting_controls_always_visible_summary),
                     checked = controlsAlwaysVisible,
                     onCheckedChange = onControlsAlwaysVisible,
+                )
+                SettingRow(
+                    title = stringResource(R.string.setting_volume_gesture),
+                    summary = stringResource(R.string.setting_volume_gesture_summary),
+                    checked = volumeGesture,
+                    onCheckedChange = onVolumeGesture,
+                )
+                SettingRow(
+                    title = stringResource(R.string.setting_seek_gesture),
+                    summary = stringResource(R.string.setting_seek_gesture_summary),
+                    checked = seekGesture,
+                    onCheckedChange = onSeekGesture,
+                )
+                SettingRow(
+                    title = stringResource(R.string.setting_sync_speed),
+                    summary = stringResource(R.string.setting_sync_speed_summary),
+                    checked = syncSpeed,
+                    onCheckedChange = onSyncSpeed,
+                )
+                SettingRow(
+                    title = stringResource(R.string.setting_auto_loop),
+                    summary = stringResource(R.string.setting_auto_loop_summary),
+                    checked = autoLoop,
+                    onCheckedChange = onAutoLoop,
                 )
                 SettingRow(
                     title = stringResource(R.string.setting_fast_seek),

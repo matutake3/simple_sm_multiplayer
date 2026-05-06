@@ -3,6 +3,7 @@ package jp.simplist.smmultiplayer.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,18 +56,16 @@ fun TopBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Compact mode (icons only) when the bar would otherwise overflow — typically
-    // any portrait phone width.
-    val showLabels = LocalConfiguration.current.screenWidthDp >= 600
+    // Width thresholds:
+    //   < 500 dp: two-row layout (typical phone portrait — wouldn't fit in one row)
+    //   500-599 dp: one row, icons only
+    //   >= 600 dp: one row, with text labels
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    val twoRows = widthDp < 500
+    val showLabels = widthDp >= 600
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(PlayerEmptyBg)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .height(40.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    @Composable
+    fun PlaybackControls() {
         BarButton(
             icon = Icons.Filled.PlayArrow,
             label = stringResource(R.string.action_play_all).takeIf { showLabels },
@@ -84,10 +83,10 @@ fun TopBar(
             label = stringResource(R.string.action_clear_all).takeIf { showLabels },
             onClick = onClearAll,
         )
+    }
 
-        Spacer(Modifier.width(12.dp))
-
-        // Layout selector
+    @Composable
+    fun LayoutSelector() {
         Row(
             modifier = Modifier
                 .background(OverlayScrim, RoundedCornerShape(6.dp))
@@ -104,10 +103,10 @@ fun TopBar(
                 LayoutChip(n = n, selected = n == layoutMode, onClick = { onLayoutChange(n) })
             }
         }
+    }
 
-        Spacer(Modifier.weight(1f))
-
-        // Sync playback toggle
+    @Composable
+    fun ModeToggles() {
         BarButton(
             icon = if (syncPlayback) Icons.Filled.Sync else Icons.Filled.LinkOff,
             label = if (showLabels) {
@@ -118,7 +117,6 @@ fun TopBar(
             highlight = syncPlayback,
         )
         Spacer(Modifier.width(4.dp))
-        // Solo audio toggle
         BarButton(
             icon = if (soloAudio) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
             label = if (showLabels) {
@@ -128,25 +126,73 @@ fun TopBar(
             onClick = onToggleSolo,
             highlight = soloAudio,
         )
+    }
+
+    @Composable
+    fun ToolButtons() {
+        BarButton(icon = Icons.Filled.Bookmarks, label = null, onClick = onOpenPresets)
         Spacer(Modifier.width(4.dp))
-        BarButton(
-            icon = Icons.Filled.Bookmarks,
-            label = null,
-            onClick = onOpenPresets,
-        )
-        Spacer(Modifier.width(4.dp))
-        BarButton(
-            icon = Icons.Filled.Settings,
-            label = null,
-            onClick = onOpenSettings,
-        )
-        Spacer(Modifier.width(4.dp))
-        // Manual close (in addition to the 5s auto-hide).
+        BarButton(icon = Icons.Filled.Settings, label = null, onClick = onOpenSettings)
+    }
+
+    @Composable
+    fun CloseButton() {
         BarButton(
             icon = Icons.Filled.KeyboardArrowUp,
             label = null,
             onClick = onClose,
         )
+    }
+
+    if (twoRows) {
+        // Narrow widths (e.g. phone portrait): split into two rows so nothing
+        // is pushed off-screen. Row 1: most-frequent actions + close.
+        // Row 2: mode toggles + tools.
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(PlayerEmptyBg)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PlaybackControls()
+                Spacer(Modifier.width(8.dp))
+                LayoutSelector()
+                Spacer(Modifier.weight(1f))
+                CloseButton()
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ModeToggles()
+                Spacer(Modifier.weight(1f))
+                ToolButtons()
+            }
+        }
+    } else {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(PlayerEmptyBg)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .height(40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlaybackControls()
+            Spacer(Modifier.width(12.dp))
+            LayoutSelector()
+            Spacer(Modifier.weight(1f))
+            ModeToggles()
+            Spacer(Modifier.width(4.dp))
+            ToolButtons()
+            Spacer(Modifier.width(4.dp))
+            CloseButton()
+        }
     }
 }
 

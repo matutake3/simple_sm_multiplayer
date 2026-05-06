@@ -21,6 +21,10 @@ class SettingsRepository(context: Context) {
     private val keySeekIndicator = booleanPreferencesKey("show_seek_indicator")
     private val keyControlsAlwaysVisible = booleanPreferencesKey("controls_always_visible")
     private val keyFastSeek = booleanPreferencesKey("fast_seek")
+    private val keySyncSpeed = booleanPreferencesKey("sync_speed")
+    private val keyAutoLoop = booleanPreferencesKey("auto_loop")
+    private val keyVolumeGesture = booleanPreferencesKey("volume_gesture")
+    private val keySeekGesture = booleanPreferencesKey("seek_gesture")
     private val keyLayoutMode = intPreferencesKey("layout_mode")
     private val keySoloAudio = booleanPreferencesKey("solo_audio")
     private val keySoloIndex = intPreferencesKey("solo_index")
@@ -38,6 +42,14 @@ class SettingsRepository(context: Context) {
         ds.data.map { it[keyControlsAlwaysVisible] ?: false }
     val fastSeek: Flow<Boolean> =
         ds.data.map { it[keyFastSeek] ?: false }
+    val syncSpeed: Flow<Boolean> =
+        ds.data.map { it[keySyncSpeed] ?: false }
+    val autoLoop: Flow<Boolean> =
+        ds.data.map { it[keyAutoLoop] ?: true }
+    val volumeGesture: Flow<Boolean> =
+        ds.data.map { it[keyVolumeGesture] ?: true }
+    val seekGesture: Flow<Boolean> =
+        ds.data.map { it[keySeekGesture] ?: true }
     val layoutMode: Flow<Int> =
         ds.data.map { (it[keyLayoutMode] ?: 1).coerceIn(1, 4) }
     val soloAudio: Flow<Boolean> =
@@ -63,6 +75,10 @@ class SettingsRepository(context: Context) {
     suspend fun setShowSeekIndicator(v: Boolean) { ds.edit { it[keySeekIndicator] = v } }
     suspend fun setControlsAlwaysVisible(v: Boolean) { ds.edit { it[keyControlsAlwaysVisible] = v } }
     suspend fun setFastSeek(v: Boolean) { ds.edit { it[keyFastSeek] = v } }
+    suspend fun setSyncSpeed(v: Boolean) { ds.edit { it[keySyncSpeed] = v } }
+    suspend fun setAutoLoop(v: Boolean) { ds.edit { it[keyAutoLoop] = v } }
+    suspend fun setVolumeGesture(v: Boolean) { ds.edit { it[keyVolumeGesture] = v } }
+    suspend fun setSeekGesture(v: Boolean) { ds.edit { it[keySeekGesture] = v } }
     suspend fun setLayoutMode(n: Int) { ds.edit { it[keyLayoutMode] = n.coerceIn(1, 4) } }
     suspend fun setSoloAudio(v: Boolean) { ds.edit { it[keySoloAudio] = v } }
     suspend fun setSoloIndex(idx: Int) { ds.edit { it[keySoloIndex] = idx.coerceIn(0, 3) } }

@@ -106,6 +106,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         repo.controlsAlwaysVisible.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val fastSeek: StateFlow<Boolean> =
         repo.fastSeek.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val syncSpeed: StateFlow<Boolean> =
+        repo.syncSpeed.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val autoLoop: StateFlow<Boolean> =
+        repo.autoLoop.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val volumeGesture: StateFlow<Boolean> =
+        repo.volumeGesture.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val seekGesture: StateFlow<Boolean> =
+        repo.seekGesture.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val layoutMode: StateFlow<Int> =
         repo.layoutMode.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
     val soloAudio: StateFlow<Boolean> =
@@ -207,6 +215,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
+        // Apply auto-loop (REPEAT_MODE_ONE) toggle to all ExoPlayers.
+        viewModelScope.launch {
+            autoLoop.collect { loop ->
+                val mode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+                players.forEach { runCatching { it.repeatMode = mode } }
+            }
+        }
+
         // Apply effective volume per slot (respect solo audio mode).
         viewModelScope.launch {
             combine(_slots, soloAudio, soloIndex) { s, solo, sIdx ->
@@ -237,10 +253,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     val next = current.toMutableList()
                     var dirty = false
                     for (i in 0 until SLOT_COUNT) {
-                        if (i < mode && visibleControlsByIndex[i] && !isStopped[i]) {
+                        if (i < mode && !isStopped[i]) {
                             val newPos = players[i].currentPosition
-                            if (next[i].positionMs != newPos) {
-                                next[i] = next[i].copy(positionMs = newPos)
+                            // A/B-loop boundary: if past B, jump back to A.
+                            // This must run regardless of controls overlay
+                            // visibility — the loop should keep working even
+                            // when the user has dismissed the cell controls.
+                            val slot = next[i]
+                            val a = slot.loopAMs
+                            val b = slot.loopBMs
+                            if (slot.loopEnabled && a != null && b != null && a < b && newPos >= b) {
+                                players[i].seekTo(a)
+                                next[i] = slot.copy(positionMs = a)
+                                dirty = true
+                            } else if (visibleControlsByIndex[i] && slot.positionMs != newPos) {
+                                next[i] = slot.copy(positionMs = newPos)
                                 dirty = true
                             }
                         }
@@ -267,7 +294,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         cachedPositions[slotIndex] = 0L
         val title = queryDisplayName(uri)
         updateSlot(slotIndex) {
-            it.copy(uri = uri, title = title, durationMs = 0, positionMs = 0, isReady = false)
+            it.copy(
+                uri = uri,
+                title = title,
+                durationMs = 0,
+                positionMs = 0,
+                isReady = false,
+                // Loop bounds are tied to the previous video — drop them.
+                loopAMs = null,
+                loopBMs = null,
+                loopEnabled = false,
+            )
         }
         if (persist) {
             runCatching {
@@ -431,15 +468,64 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         updateSlot(slotIndex) { it.copy(volume = v.coerceIn(0f, 1f)) }
     }
 
-/** Apply a new playback speed to the given slot, persisting the choice. */
+    /* ---------- A/B loop ---------- */
+
+    /**
+     * Set the slot's A point to its current playback position. The loop turns
+     * ON automatically the moment both A and B are set with A < B (and OFF if
+     * the range becomes invalid).
+     */
+    fun setLoopA(slotIndex: Int) {
+        if (slotIndex !in 0 until SLOT_COUNT) return
+        val pos = players[slotIndex].currentPosition.coerceAtLeast(0L)
+        updateSlot(slotIndex) {
+            val b = it.loopBMs
+            val valid = b != null && pos < b
+            it.copy(loopAMs = pos, loopEnabled = valid)
+        }
+    }
+
+    /** Set the slot's B point to its current playback position. See [setLoopA]. */
+    fun setLoopB(slotIndex: Int) {
+        if (slotIndex !in 0 until SLOT_COUNT) return
+        val pos = players[slotIndex].currentPosition.coerceAtLeast(0L)
+        updateSlot(slotIndex) {
+            val a = it.loopAMs
+            val valid = a != null && a < pos
+            it.copy(loopBMs = pos, loopEnabled = valid)
+        }
+    }
+
+    /** Clear A, B, and loop flag for the slot. */
+    fun clearLoop(slotIndex: Int) {
+        if (slotIndex !in 0 until SLOT_COUNT) return
+        updateSlot(slotIndex) {
+            it.copy(loopAMs = null, loopBMs = null, loopEnabled = false)
+        }
+    }
+
+    /**
+     * Apply a new playback speed. Normally affects only the targeted slot;
+     * if both sync-playback and the "sync speed in sync mode" option are on,
+     * the speed is broadcast to every visible slot.
+     */
     fun setPlaybackSpeed(slotIndex: Int, speed: Float) {
         if (slotIndex !in 0 until SLOT_COUNT) return
         val coerced = speed.coerceIn(0.25f, 4.0f)
-        updateSlot(slotIndex) { it.copy(playbackSpeed = coerced) }
-        runCatching {
-            players[slotIndex].playbackParameters = PlaybackParameters(coerced)
+        val targets: List<Int> = if (syncPlayback.value && syncSpeed.value) {
+            (0 until layoutMode.value).toList()
+        } else {
+            listOf(slotIndex)
         }
-        viewModelScope.launch { repo.setPlaybackSpeed(slotIndex, coerced) }
+        targets.forEach { i ->
+            updateSlot(i) { it.copy(playbackSpeed = coerced) }
+            runCatching {
+                players[i].playbackParameters = PlaybackParameters(coerced)
+            }
+        }
+        viewModelScope.launch {
+            targets.forEach { i -> repo.setPlaybackSpeed(i, coerced) }
+        }
     }
 
     /** Cycle through the available resize modes for the given slot. */
@@ -565,6 +651,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setFastSeek(v: Boolean) =
         viewModelScope.launch { repo.setFastSeek(v) }.let { Unit }
+
+    fun setSyncSpeed(v: Boolean) =
+        viewModelScope.launch { repo.setSyncSpeed(v) }.let { Unit }
+
+    fun setAutoLoop(v: Boolean) =
+        viewModelScope.launch { repo.setAutoLoop(v) }.let { Unit }
+
+    fun setVolumeGesture(v: Boolean) =
+        viewModelScope.launch { repo.setVolumeGesture(v) }.let { Unit }
+
+    fun setSeekGesture(v: Boolean) =
+        viewModelScope.launch { repo.setSeekGesture(v) }.let { Unit }
 
     private fun updateSlot(idx: Int, transform: (PlayerSlotState) -> PlayerSlotState) {
         val list = _slots.value.toMutableList()

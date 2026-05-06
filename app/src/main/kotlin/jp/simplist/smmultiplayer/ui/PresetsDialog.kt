@@ -42,6 +42,7 @@ fun PresetsDialog(
     var saveOpen by remember { mutableStateOf(false) }
     var loadConfirm by remember { mutableStateOf<LayoutPreset?>(null) }
     var deleteConfirm by remember { mutableStateOf<LayoutPreset?>(null) }
+    val scrollState = rememberScrollState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -51,7 +52,8 @@ fun PresetsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState)
+                    .simpleVerticalScrollbar(scrollState),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 if (presets.isEmpty()) {

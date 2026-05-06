@@ -64,6 +64,9 @@ fun PlayerControls(
     onClearVideo: () -> Unit,
     onCycleResizeMode: () -> Unit,
     onSetPlaybackSpeed: (Float) -> Unit,
+    onSetLoopA: () -> Unit,
+    onSetLoopB: () -> Unit,
+    onClearLoop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize().background(OverlayScrimSoft)) {
@@ -161,6 +164,19 @@ fun PlayerControls(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
+            // A/B-loop control row — only shown in non-compact (1/2/3 cell) mode,
+            // since 4-cell compact cells are too narrow for it.
+            if (!isCompact) {
+                ABLoopRow(
+                    aMs = slot.loopAMs,
+                    bMs = slot.loopBMs,
+                    enabled = slot.loopEnabled,
+                    onSetA = onSetLoopA,
+                    onSetB = onSetLoopB,
+                    onClear = onClearLoop,
+                )
+                Spacer(Modifier.size(4.dp))
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -224,6 +240,98 @@ private fun SkipButton(
                 modifier = Modifier.size(iconSize),
             )
         }
+    }
+}
+
+/**
+ * A/B loop control row: set A point, set B point, clear all.
+ * Loop activates automatically when both A and B are set with A < B; the
+ * "loop active" state is communicated by the chips' accent colour.
+ * Only shown above the seekbar in non-compact cells.
+ */
+@Composable
+private fun ABLoopRow(
+    aMs: Long?,
+    bMs: Long?,
+    enabled: Boolean,
+    onSetA: () -> Unit,
+    onSetB: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        ABChip(
+            label = stringResource(R.string.action_loop_set_a),
+            timeMs = aMs,
+            // When the loop is actually active, both chips light up; if A is
+            // set but B isn't (or range invalid), only A's "set" colour shows.
+            highlight = aMs != null,
+            active = enabled,
+            onClick = onSetA,
+        )
+        ABChip(
+            label = stringResource(R.string.action_loop_set_b),
+            timeMs = bMs,
+            highlight = bMs != null,
+            active = enabled,
+            onClick = onSetB,
+        )
+        // Clear button sits immediately to the right of A/B for discoverability.
+        // Only render once something is actually set.
+        if (aMs != null || bMs != null) {
+            ClearChip(onClick = onClear)
+        }
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ABChip(
+    label: String,
+    timeMs: Long?,
+    highlight: Boolean,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val text = if (timeMs != null) "$label ${formatTime(timeMs)}" else label
+    // Active loop → vivid accent. Set-but-loop-inactive → dim accent. Unset → scrim.
+    val bg = when {
+        active && highlight -> Accent
+        highlight -> Accent.copy(alpha = 0.5f)
+        else -> OverlayScrim
+    }
+    val textColor = if (highlight) Color.Black else Color.White
+    Row(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = textColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun ClearChip(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .background(OverlayScrim, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.action_loop_clear),
+            color = Color.White,
+            fontSize = 10.sp,
+        )
     }
 }
 

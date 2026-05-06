@@ -60,6 +60,9 @@
     <string name="action_fwd_5">5秒進む</string>
     <string name="action_fwd_30">30秒進む</string>
     <string name="action_fwd_120">2分進む</string>
+    <string name="action_loop_set_a">A</string>
+    <string name="action_loop_set_b">B</string>
+    <string name="action_loop_clear">クリア</string>
 
     <!-- Settings -->
     <string name="title_settings">設定</string>
@@ -70,7 +73,15 @@
     <string name="setting_controls_always_visible">操作ボタンを常に表示</string>
     <string name="setting_controls_always_visible_summary">タップで表示・非表示を切り替えるかわりに、常時表示</string>
     <string name="setting_fast_seek">高速シーク (精度より速度を優先)</string>
-    <string name="setting_fast_seek_summary">最寄りのキーフレームへシークします。シークバー・スキップが大きな動画で大幅に速くなりますが、フレーム送りはキーフレーム単位のジャンプになります</string>
+    <string name="setting_fast_seek_summary">最寄りのキーフレームへシークします。シークバー・スキップが大きな動画で大幅に速くなります</string>
+    <string name="setting_sync_speed">同期再生時に再生速度も同期</string>
+    <string name="setting_sync_speed_summary">同期再生 ON のとき、再生速度の変更も全セルに同時適用します</string>
+    <string name="setting_auto_loop">動画を自動でループ</string>
+    <string name="setting_auto_loop_summary">動画の終端で先頭に戻って再生し続けます (A/B ループとは独立)</string>
+    <string name="setting_volume_gesture">縦ドラッグで音量調整</string>
+    <string name="setting_volume_gesture_summary">セル上で指を上下に動かすと音量を変更します</string>
+    <string name="setting_seek_gesture">横ドラッグでシーク</string>
+    <string name="setting_seek_gesture_summary">セル上で指を左右に動かすと再生位置を変更します</string>
 
     <!-- Empty state -->
     <string name="empty_slot_hint">タップして動画を選択</string>

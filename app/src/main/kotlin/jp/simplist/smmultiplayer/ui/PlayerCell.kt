@@ -65,6 +65,8 @@ fun PlayerCell(
     showVolumeIndicator: Boolean,
     showSeekIndicator: Boolean,
     controlsAlwaysVisible: Boolean,
+    volumeGestureEnabled: Boolean,
+    seekGestureEnabled: Boolean,
     soloAudio: Boolean,
     isSoloTarget: Boolean,
     onTogglePlay: () -> Unit,
@@ -76,6 +78,9 @@ fun PlayerCell(
     onClearVideo: () -> Unit,
     onCycleResizeMode: () -> Unit,
     onSetPlaybackSpeed: (Float) -> Unit,
+    onSetLoopA: () -> Unit,
+    onSetLoopB: () -> Unit,
+    onClearLoop: () -> Unit,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -111,6 +116,8 @@ fun PlayerCell(
     val latestSlot by rememberUpdatedState(slot)
     val latestSoloAudio by rememberUpdatedState(soloAudio)
     val latestIsSoloTarget by rememberUpdatedState(isSoloTarget)
+    val latestVolumeGesture by rememberUpdatedState(volumeGestureEnabled)
+    val latestSeekGesture by rememberUpdatedState(seekGestureEnabled)
 
     Box(
         modifier = modifier
@@ -129,32 +136,34 @@ fun PlayerCell(
                 detectDirectionalDrag(
                     onVerticalStart = { dragStartVolume = latestSlot.volume },
                     onVerticalDelta = { totalDy ->
-                        val cellHeight = size.height.toFloat().coerceAtLeast(1f)
-                        val deltaVol = -totalDy / cellHeight
-                        val newVol = (dragStartVolume + deltaVol).coerceIn(0f, 1f)
-                        onVolumeChange(newVol)
-                        if (latestSoloAudio && !latestIsSoloTarget) onActivateSolo()
-                        volumeIndicator = newVol
+                        if (latestVolumeGesture) {
+                            val cellHeight = size.height.toFloat().coerceAtLeast(1f)
+                            val deltaVol = -totalDy / cellHeight
+                            val newVol = (dragStartVolume + deltaVol).coerceIn(0f, 1f)
+                            onVolumeChange(newVol)
+                            if (latestSoloAudio && !latestIsSoloTarget) onActivateSolo()
+                            volumeIndicator = newVol
+                        }
                     },
                     onHorizontalStart = {
-                        // Read position directly from the player rather than
-                        // from the state — when the controls overlay is hidden
-                        // the position-polling loop skips updates, so
-                        // `latestSlot.positionMs` can be stale by minutes.
                         dragStartPosMs = player.currentPosition
                     },
                     onHorizontalDelta = { totalDx ->
-                        val cellWidth = size.width.toFloat().coerceAtLeast(1f)
-                        val durationMs = latestSlot.durationMs.coerceAtLeast(1L)
-                        // 1 screen width ≈ 60 s seek
-                        val totalDeltaMs = (totalDx / cellWidth * 60_000f).toLong()
-                        val target = (dragStartPosMs + totalDeltaMs).coerceIn(0L, durationMs)
-                        seekIndicator = SeekIndicatorState(dragStartPosMs, target, committed = false)
+                        if (latestSeekGesture) {
+                            val cellWidth = size.width.toFloat().coerceAtLeast(1f)
+                            val durationMs = latestSlot.durationMs.coerceAtLeast(1L)
+                            // 1 screen width ≈ 60 s seek
+                            val totalDeltaMs = (totalDx / cellWidth * 60_000f).toLong()
+                            val target = (dragStartPosMs + totalDeltaMs).coerceIn(0L, durationMs)
+                            seekIndicator = SeekIndicatorState(dragStartPosMs, target, committed = false)
+                        }
                     },
                     onHorizontalEnd = {
-                        seekIndicator?.let { s ->
-                            onSeekTo(s.target)
-                            seekIndicator = s.copy(committed = true)
+                        if (latestSeekGesture) {
+                            seekIndicator?.let { s ->
+                                onSeekTo(s.target)
+                                seekIndicator = s.copy(committed = true)
+                            }
                         }
                     },
                 )
@@ -256,6 +265,9 @@ fun PlayerCell(
                 onClearVideo = onClearVideo,
                 onCycleResizeMode = onCycleResizeMode,
                 onSetPlaybackSpeed = onSetPlaybackSpeed,
+                onSetLoopA = onSetLoopA,
+                onSetLoopB = onSetLoopB,
+                onClearLoop = onClearLoop,
             )
         }
 

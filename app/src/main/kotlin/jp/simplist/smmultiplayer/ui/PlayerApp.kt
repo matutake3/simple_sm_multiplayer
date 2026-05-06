@@ -49,6 +49,10 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val showSeek by viewModel.showSeekIndicator.collectAsStateWithLifecycle()
     val ctrlAlways by viewModel.controlsAlwaysVisible.collectAsStateWithLifecycle()
     val fastSeek by viewModel.fastSeek.collectAsStateWithLifecycle()
+    val syncSpeed by viewModel.syncSpeed.collectAsStateWithLifecycle()
+    val autoLoop by viewModel.autoLoop.collectAsStateWithLifecycle()
+    val volumeGesture by viewModel.volumeGesture.collectAsStateWithLifecycle()
+    val seekGesture by viewModel.seekGesture.collectAsStateWithLifecycle()
 
     var settingsOpen by remember { mutableStateOf(false) }
     var presetsOpen by remember { mutableStateOf(false) }
@@ -117,6 +121,8 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             showVolumeIndicator = showVol,
             showSeekIndicator = showSeek,
             controlsAlwaysVisible = ctrlAlways,
+            volumeGestureEnabled = volumeGesture,
+            seekGestureEnabled = seekGesture,
             soloAudio = soloAudio,
             soloIndex = soloIndex,
             onPickForSlot = { idx ->
@@ -161,10 +167,18 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             showSeekIndicator = showSeek,
             controlsAlwaysVisible = ctrlAlways,
             fastSeek = fastSeek,
+            syncSpeed = syncSpeed,
+            autoLoop = autoLoop,
+            volumeGesture = volumeGesture,
+            seekGesture = seekGesture,
             onShowVolumeIndicator = { viewModel.setShowVolumeIndicator(it) },
             onShowSeekIndicator = { viewModel.setShowSeekIndicator(it) },
             onControlsAlwaysVisible = { viewModel.setControlsAlwaysVisible(it) },
             onFastSeek = { viewModel.setFastSeek(it) },
+            onSyncSpeed = { viewModel.setSyncSpeed(it) },
+            onAutoLoop = { viewModel.setAutoLoop(it) },
+            onVolumeGesture = { viewModel.setVolumeGesture(it) },
+            onSeekGesture = { viewModel.setSeekGesture(it) },
             onDismiss = { settingsOpen = false },
         )
     }

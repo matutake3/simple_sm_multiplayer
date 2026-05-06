@@ -23,6 +23,12 @@ data class PlayerSlotState(
     val isReady: Boolean = false,
     val resizeMode: Int = ResizeMode.FIT,
     val playbackSpeed: Float = 1f,
+    /** Loop A point (ms). Null = unset. Ephemeral, not persisted. */
+    val loopAMs: Long? = null,
+    /** Loop B point (ms). Null = unset. */
+    val loopBMs: Long? = null,
+    /** When true and both A/B are set with A < B, loop A↔B during playback. */
+    val loopEnabled: Boolean = false,
 )
 
 /**
