@@ -16,9 +16,11 @@ import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
@@ -41,11 +43,13 @@ import jp.simplist.smmultiplayer.ui.theme.PlayerEmptyBg
 fun TopBar(
     layoutMode: Int,
     soloAudio: Boolean,
+    syncPlayback: Boolean,
     onPlayAll: () -> Unit,
     onPauseAll: () -> Unit,
     onClearAll: () -> Unit,
     onLayoutChange: (Int) -> Unit,
     onToggleSolo: () -> Unit,
+    onToggleSync: () -> Unit,
     onOpenPresets: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
@@ -103,6 +107,17 @@ fun TopBar(
 
         Spacer(Modifier.weight(1f))
 
+        // Sync playback toggle
+        BarButton(
+            icon = if (syncPlayback) Icons.Filled.Sync else Icons.Filled.LinkOff,
+            label = if (showLabels) {
+                if (syncPlayback) stringResource(R.string.action_sync_on)
+                else stringResource(R.string.action_sync_off)
+            } else null,
+            onClick = onToggleSync,
+            highlight = syncPlayback,
+        )
+        Spacer(Modifier.width(4.dp))
         // Solo audio toggle
         BarButton(
             icon = if (soloAudio) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,

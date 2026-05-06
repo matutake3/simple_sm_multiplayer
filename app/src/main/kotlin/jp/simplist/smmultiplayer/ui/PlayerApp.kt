@@ -44,6 +44,7 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val layoutMode by viewModel.layoutMode.collectAsStateWithLifecycle()
     val soloAudio by viewModel.soloAudio.collectAsStateWithLifecycle()
     val soloIndex by viewModel.soloIndex.collectAsStateWithLifecycle()
+    val syncPlayback by viewModel.syncPlayback.collectAsStateWithLifecycle()
     val showVol by viewModel.showVolumeIndicator.collectAsStateWithLifecycle()
     val showSeek by viewModel.showSeekIndicator.collectAsStateWithLifecycle()
     val ctrlAlways by viewModel.controlsAlwaysVisible.collectAsStateWithLifecycle()
@@ -139,11 +140,13 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             TopBar(
                 layoutMode = layoutMode,
                 soloAudio = soloAudio,
+                syncPlayback = syncPlayback,
                 onPlayAll = { viewModel.playAll(); touch() },
                 onPauseAll = { viewModel.pauseAll(); touch() },
                 onClearAll = { clearAllConfirmOpen = true; touch() },
                 onLayoutChange = { viewModel.setLayoutMode(it); touch() },
                 onToggleSolo = { viewModel.toggleSoloAudio(); touch() },
+                onToggleSync = { viewModel.toggleSyncPlayback(); touch() },
                 onOpenPresets = { presetsOpen = true; touch() },
                 onOpenSettings = { settingsOpen = true; touch() },
                 onClose = { topBarVisible = false },

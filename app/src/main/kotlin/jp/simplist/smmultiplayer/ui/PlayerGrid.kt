@@ -47,6 +47,7 @@ fun PlayerGrid(
             onPickVideo = { onPickForSlot(index) },
             onClearVideo = { viewModel.clearVideo(index) },
             onCycleResizeMode = { viewModel.cycleResizeMode(index) },
+            onSetPlaybackSpeed = { s -> viewModel.setPlaybackSpeed(index, s) },
             onControlsVisibilityChange = { v -> viewModel.setControlsVisible(index, v) },
             modifier = mod,
         )

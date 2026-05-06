@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -22,9 +23,11 @@ class SettingsRepository(context: Context) {
     private val keyLayoutMode = intPreferencesKey("layout_mode")
     private val keySoloAudio = booleanPreferencesKey("solo_audio")
     private val keySoloIndex = intPreferencesKey("solo_index")
+    private val keySyncPlayback = booleanPreferencesKey("sync_playback")
     private val keyPresets = stringPreferencesKey("layout_presets_json")
     private fun keyUri(idx: Int) = stringPreferencesKey("uri_$idx")
     private fun keyResizeMode(idx: Int) = intPreferencesKey("resize_mode_$idx")
+    private fun keyPlaybackSpeed(idx: Int) = floatPreferencesKey("playback_speed_$idx")
 
     val showVolumeIndicator: Flow<Boolean> =
         ds.data.map { it[keyVolumeIndicator] ?: true }
@@ -38,12 +41,17 @@ class SettingsRepository(context: Context) {
         ds.data.map { it[keySoloAudio] ?: false }
     val soloIndex: Flow<Int> =
         ds.data.map { (it[keySoloIndex] ?: 0).coerceIn(0, 3) }
+    val syncPlayback: Flow<Boolean> =
+        ds.data.map { it[keySyncPlayback] ?: false }
 
     fun savedUri(idx: Int): Flow<String?> =
         ds.data.map { it[keyUri(idx)] }
 
     fun savedResizeMode(idx: Int): Flow<Int> =
         ds.data.map { it[keyResizeMode(idx)] ?: 0 }
+
+    fun savedPlaybackSpeed(idx: Int): Flow<Float> =
+        ds.data.map { it[keyPlaybackSpeed(idx)] ?: 1f }
 
     val presetsJson: Flow<String> =
         ds.data.map { it[keyPresets] ?: "[]" }
@@ -54,6 +62,7 @@ class SettingsRepository(context: Context) {
     suspend fun setLayoutMode(n: Int) { ds.edit { it[keyLayoutMode] = n.coerceIn(1, 4) } }
     suspend fun setSoloAudio(v: Boolean) { ds.edit { it[keySoloAudio] = v } }
     suspend fun setSoloIndex(idx: Int) { ds.edit { it[keySoloIndex] = idx.coerceIn(0, 3) } }
+    suspend fun setSyncPlayback(v: Boolean) { ds.edit { it[keySyncPlayback] = v } }
     suspend fun setUri(idx: Int, uri: String?) {
         ds.edit { prefs ->
             if (uri == null) prefs.remove(keyUri(idx)) else prefs[keyUri(idx)] = uri
@@ -62,6 +71,10 @@ class SettingsRepository(context: Context) {
 
     suspend fun setResizeMode(idx: Int, mode: Int) {
         ds.edit { it[keyResizeMode(idx)] = mode }
+    }
+
+    suspend fun setPlaybackSpeed(idx: Int, speed: Float) {
+        ds.edit { it[keyPlaybackSpeed(idx)] = speed }
     }
 
     suspend fun setPresetsJson(json: String) {

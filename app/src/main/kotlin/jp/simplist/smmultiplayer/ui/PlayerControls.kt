@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import jp.simplist.smmultiplayer.player.PlaybackSpeeds
 import jp.simplist.smmultiplayer.player.PlayerSlotState
 import jp.simplist.smmultiplayer.player.ResizeMode
 import jp.simplist.smmultiplayer.ui.theme.Accent
@@ -58,6 +61,7 @@ fun PlayerControls(
     onPickVideo: () -> Unit,
     onClearVideo: () -> Unit,
     onCycleResizeMode: () -> Unit,
+    onSetPlaybackSpeed: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize().background(OverlayScrimSoft)) {
@@ -76,6 +80,8 @@ fun PlayerControls(
                 maxLines = 1,
                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
             )
+            SpeedChip(current = slot.playbackSpeed, onChange = onSetPlaybackSpeed)
+            Spacer(Modifier.width(4.dp))
             IconButton(onClick = onCycleResizeMode, modifier = Modifier.size(32.dp)) {
                 val (icon, desc) = when (slot.resizeMode) {
                     ResizeMode.ZOOM -> Icons.Filled.Fullscreen to "ZOOM"
@@ -218,6 +224,49 @@ private fun SkipButton(
         }
     }
 }
+
+/**
+ * Compact tappable label that shows the current playback speed (e.g. "1.0x")
+ * and pops a menu of choices. Anchored in the controls' top-row, beside the
+ * resize-mode button.
+ */
+@Composable
+private fun SpeedChip(current: Float, onChange: (Float) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .background(OverlayScrim, RoundedCornerShape(6.dp))
+                .clickable { menuOpen = true }
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "${formatSpeed(current)}x",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            PlaybackSpeeds.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text("${formatSpeed(s)}x") },
+                    onClick = {
+                        onChange(s)
+                        menuOpen = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun formatSpeed(s: Float): String =
+    if (s == s.toInt().toFloat()) "${s.toInt()}.0" else s.toString()
 
 internal fun formatTime(ms: Long): String {
     if (ms <= 0L) return "00:00"

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -108,6 +109,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         repo.soloAudio.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val soloIndex: StateFlow<Int> =
         repo.soloIndex.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val syncPlayback: StateFlow<Boolean> =
+        repo.syncPlayback.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val presets: StateFlow<List<LayoutPreset>> =
         repo.presetsJson
@@ -147,19 +150,30 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             })
         }
 
-        // Restore persisted URIs and resize modes.
+        // Restore persisted URIs, resize modes and playback speeds.
         viewModelScope.launch {
+            data class Saved(val uri: String?, val resizeMode: Int, val speed: Float)
             val saved = withContext(Dispatchers.IO) {
                 (0 until SLOT_COUNT).map { i ->
-                    repo.savedUri(i).first() to repo.savedResizeMode(i).first()
+                    Saved(
+                        uri = repo.savedUri(i).first(),
+                        resizeMode = repo.savedResizeMode(i).first(),
+                        speed = repo.savedPlaybackSpeed(i).first(),
+                    )
                 }
             }
-            saved.forEachIndexed { i, (uri, mode) ->
-                if (mode != 0) {
-                    updateSlot(i) { it.copy(resizeMode = mode) }
+            saved.forEachIndexed { i, s ->
+                if (s.resizeMode != 0) {
+                    updateSlot(i) { it.copy(resizeMode = s.resizeMode) }
                 }
-                if (!uri.isNullOrEmpty()) {
-                    runCatching { setVideoUri(i, Uri.parse(uri), persist = false) }
+                if (s.speed != 1f) {
+                    updateSlot(i) { it.copy(playbackSpeed = s.speed) }
+                    runCatching {
+                        players[i].playbackParameters = PlaybackParameters(s.speed)
+                    }
+                }
+                if (!s.uri.isNullOrEmpty()) {
+                    runCatching { setVideoUri(i, Uri.parse(s.uri), persist = false) }
                 }
             }
         }
@@ -257,10 +271,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val player = players[slotIndex]
         player.stop()
         player.clearMediaItems()
+        // Reset playback parameters to default so a fresh video doesn't
+        // inherit the previous slot occupant's speed setting.
+        runCatching { player.playbackParameters = PlaybackParameters(1f) }
         isStopped[slotIndex] = false
         cachedPositions[slotIndex] = 0L
         updateSlot(slotIndex) { PlayerSlotState(index = slotIndex) }
-        viewModelScope.launch { repo.setUri(slotIndex, null) }
+        viewModelScope.launch {
+            repo.setUri(slotIndex, null)
+            repo.setPlaybackSpeed(slotIndex, 1f)
+        }
     }
 
     /** Clear every slot's video at once. */
@@ -329,7 +349,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePlay(slotIndex: Int) {
         val p = players[slotIndex]
-        if (p.isPlaying) p.pause() else p.play()
+        val nowPlaying = p.isPlaying
+        if (syncPlayback.value) {
+            // Sync mode: ALL visible slots toggle together based on the
+            // tapped slot's current state.
+            val mode = layoutMode.value
+            for (i in 0 until mode) {
+                val pp = players[i]
+                if (_slots.value[i].uri == null) continue
+                if (nowPlaying) pp.pause() else pp.play()
+            }
+        } else {
+            if (nowPlaying) p.pause() else p.play()
+        }
     }
 
     fun playAll() {
@@ -344,21 +376,58 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun seekTo(slotIndex: Int, positionMs: Long) {
-        val p = players[slotIndex]
-        val target = positionMs.coerceIn(0L, p.duration.coerceAtLeast(0L))
-        p.seekTo(target)
-        updateSlot(slotIndex) { it.copy(positionMs = target) }
+        if (syncPlayback.value) {
+            // Sync seek: all visible slots jump to the same absolute position
+            // (clamped per-slot so shorter videos cap at their own end).
+            val mode = layoutMode.value
+            for (i in 0 until mode) {
+                val pp = players[i]
+                val target = positionMs.coerceIn(0L, pp.duration.coerceAtLeast(0L))
+                pp.seekTo(target)
+                updateSlot(i) { it.copy(positionMs = target) }
+            }
+        } else {
+            val p = players[slotIndex]
+            val target = positionMs.coerceIn(0L, p.duration.coerceAtLeast(0L))
+            p.seekTo(target)
+            updateSlot(slotIndex) { it.copy(positionMs = target) }
+        }
     }
 
     fun skipBy(slotIndex: Int, deltaMs: Long) {
-        val p = players[slotIndex]
-        val target = (p.currentPosition + deltaMs).coerceIn(0L, p.duration.coerceAtLeast(0L))
-        p.seekTo(target)
-        updateSlot(slotIndex) { it.copy(positionMs = target) }
+        if (syncPlayback.value) {
+            // Sync skip: each slot advances by the same delta from its own
+            // position, preserving any pre-existing offsets between slots.
+            val mode = layoutMode.value
+            for (i in 0 until mode) {
+                val pp = players[i]
+                val target = (pp.currentPosition + deltaMs)
+                    .coerceIn(0L, pp.duration.coerceAtLeast(0L))
+                pp.seekTo(target)
+                updateSlot(i) { it.copy(positionMs = target) }
+            }
+        } else {
+            val p = players[slotIndex]
+            val target = (p.currentPosition + deltaMs)
+                .coerceIn(0L, p.duration.coerceAtLeast(0L))
+            p.seekTo(target)
+            updateSlot(slotIndex) { it.copy(positionMs = target) }
+        }
     }
 
     fun setVolume(slotIndex: Int, v: Float) {
         updateSlot(slotIndex) { it.copy(volume = v.coerceIn(0f, 1f)) }
+    }
+
+    /** Apply a new playback speed to the given slot, persisting the choice. */
+    fun setPlaybackSpeed(slotIndex: Int, speed: Float) {
+        if (slotIndex !in 0 until SLOT_COUNT) return
+        val coerced = speed.coerceIn(0.25f, 4.0f)
+        updateSlot(slotIndex) { it.copy(playbackSpeed = coerced) }
+        runCatching {
+            players[slotIndex].playbackParameters = PlaybackParameters(coerced)
+        }
+        viewModelScope.launch { repo.setPlaybackSpeed(slotIndex, coerced) }
     }
 
     /** Cycle through the available resize modes for the given slot. */
@@ -390,6 +459,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     title = s.title,
                     volume = s.volume,
                     resizeMode = s.resizeMode,
+                    playbackSpeed = s.playbackSpeed,
                 )
             },
         )
@@ -428,15 +498,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             // Per-slot.
             preset.slots.forEachIndexed { i, ps ->
                 repo.setResizeMode(i, ps.resizeMode)
+                repo.setPlaybackSpeed(i, ps.playbackSpeed)
                 updateSlot(i) {
                     it.copy(
                         volume = ps.volume,
                         resizeMode = ps.resizeMode,
+                        playbackSpeed = ps.playbackSpeed,
                         title = ps.title,
                         durationMs = 0L,
                         positionMs = 0L,
                         isReady = false,
                     )
+                }
+                runCatching {
+                    players[i].playbackParameters = PlaybackParameters(ps.playbackSpeed)
                 }
                 if (!ps.uri.isNullOrEmpty()) {
                     runCatching { setVideoUri(i, Uri.parse(ps.uri), persist = true) }
@@ -457,6 +532,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSoloAudio() {
         viewModelScope.launch { repo.setSoloAudio(!soloAudio.value) }
+    }
+
+    fun toggleSyncPlayback() {
+        viewModelScope.launch { repo.setSyncPlayback(!syncPlayback.value) }
     }
 
     fun selectSoloAudioSlot(slotIndex: Int) {

@@ -75,6 +75,7 @@ fun PlayerCell(
     onPickVideo: () -> Unit,
     onClearVideo: () -> Unit,
     onCycleResizeMode: () -> Unit,
+    onSetPlaybackSpeed: (Float) -> Unit,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -254,6 +255,7 @@ fun PlayerCell(
                 onPickVideo = onPickVideo,
                 onClearVideo = onClearVideo,
                 onCycleResizeMode = onCycleResizeMode,
+                onSetPlaybackSpeed = onSetPlaybackSpeed,
             )
         }
 

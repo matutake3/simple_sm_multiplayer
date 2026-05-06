@@ -12,6 +12,7 @@ data class PresetSlot(
     val title: String?,
     val volume: Float,
     val resizeMode: Int,
+    val playbackSpeed: Float = 1f,
 )
 
 /**
@@ -51,6 +52,7 @@ private fun PresetSlot.toJson(): JSONObject = JSONObject().apply {
     put("title", title ?: JSONObject.NULL)
     put("volume", volume.toDouble())
     put("resizeMode", resizeMode)
+    put("playbackSpeed", playbackSpeed.toDouble())
 }
 
 internal fun JSONObject.toLayoutPreset(): LayoutPreset? = runCatching {
@@ -67,7 +69,7 @@ internal fun JSONObject.toLayoutPreset(): LayoutPreset? = runCatching {
                 // Pad/trim to exactly 4 slots so callers can index safely.
                 List(4) { i ->
                     parsed.getOrNull(i)
-                        ?: PresetSlot(uri = null, title = null, volume = 1f, resizeMode = 0)
+                        ?: PresetSlot(uri = null, title = null, volume = 1f, resizeMode = 0, playbackSpeed = 1f)
                 }
             },
     )
@@ -78,6 +80,7 @@ private fun JSONObject.toPresetSlot(): PresetSlot = PresetSlot(
     title = if (isNull("title")) null else optString("title").ifEmpty { null },
     volume = optDouble("volume", 1.0).toFloat().coerceIn(0f, 1f),
     resizeMode = optInt("resizeMode", 0),
+    playbackSpeed = optDouble("playbackSpeed", 1.0).toFloat().coerceIn(0.25f, 4f),
 )
 
 internal fun List<LayoutPreset>.toJsonArray(): JSONArray = JSONArray().apply {

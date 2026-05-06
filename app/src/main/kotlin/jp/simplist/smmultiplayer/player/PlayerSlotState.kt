@@ -22,7 +22,13 @@ data class PlayerSlotState(
     val volume: Float = 1f,
     val isReady: Boolean = false,
     val resizeMode: Int = ResizeMode.FIT,
+    val playbackSpeed: Float = 1f,
 )
+
+/**
+ * The discrete playback speeds that the speed-picker UI cycles through.
+ */
+val PlaybackSpeeds: List<Float> = listOf(0.25f, 0.5f, 1.0f, 1.5f, 2.0f)
 
 /**
  * Convenience constants for the subset of `AspectRatioFrameLayout` resize
