@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+) Auto Backup rules -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="trial_state.xml" />
+        <include domain="sharedpref" path="purchase_state.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="trial_state.xml" />
+        <include domain="sharedpref" path="purchase_state.xml" />
+    </device-transfer>
+</data-extraction-rules>

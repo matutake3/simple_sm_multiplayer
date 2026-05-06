@@ -3,6 +3,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+/** Optional local override read from ~/.gradle/gradle.properties or ./gradle.properties:
+ *  trialBypass=true  — Release でも試用期限を無視（開発者の端末のみに推奨）
+ *  trialBypass=false — Debug でも試用期限を適用（期限切れUIの確認用）
+ * Debug 既定: 制限オフ。false 指定時のみ Debug でも本番と同じ期限挙動。
+ */
+val trialBypassGradleProp: String? =
+    project.findProperty("trialBypass") as? String
+
 android {
     namespace = "jp.simplist.smmultiplayer"
     compileSdk = 35
@@ -23,9 +31,17 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            val trialBypassRelease =
+                trialBypassGradleProp?.equals("true", ignoreCase = true) == true
+            buildConfigField("boolean", "TRIAL_BYPASS", trialBypassRelease.toString())
         }
         debug {
             isMinifyEnabled = false
+            val trialBypassDebug = when (trialBypassGradleProp?.lowercase()) {
+                "false", "no", "0" -> false
+                else -> true
+            }
+            buildConfigField("boolean", "TRIAL_BYPASS", trialBypassDebug.toString())
         }
     }
 
@@ -91,6 +107,9 @@ dependencies {
 
     // DocumentFile (SAF)
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // Google Play Billing (¥250 buyout, no subscription)
+    implementation("com.android.billingclient:billing-ktx:7.0.0")
 
     // Test
     testImplementation("junit:junit:4.13.2")

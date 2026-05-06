@@ -25,6 +25,7 @@ class SettingsRepository(context: Context) {
     private val keyAutoLoop = booleanPreferencesKey("auto_loop")
     private val keyVolumeGesture = booleanPreferencesKey("volume_gesture")
     private val keySeekGesture = booleanPreferencesKey("seek_gesture")
+    private val keyDisableVolumeKeys = booleanPreferencesKey("disable_volume_keys")
     private val keyLayoutMode = intPreferencesKey("layout_mode")
     private val keySoloAudio = booleanPreferencesKey("solo_audio")
     private val keySoloIndex = intPreferencesKey("solo_index")
@@ -50,6 +51,8 @@ class SettingsRepository(context: Context) {
         ds.data.map { it[keyVolumeGesture] ?: true }
     val seekGesture: Flow<Boolean> =
         ds.data.map { it[keySeekGesture] ?: true }
+    val disableVolumeKeys: Flow<Boolean> =
+        ds.data.map { it[keyDisableVolumeKeys] ?: false }
     val layoutMode: Flow<Int> =
         ds.data.map { (it[keyLayoutMode] ?: 1).coerceIn(1, 4) }
     val soloAudio: Flow<Boolean> =
@@ -79,6 +82,7 @@ class SettingsRepository(context: Context) {
     suspend fun setAutoLoop(v: Boolean) { ds.edit { it[keyAutoLoop] = v } }
     suspend fun setVolumeGesture(v: Boolean) { ds.edit { it[keyVolumeGesture] = v } }
     suspend fun setSeekGesture(v: Boolean) { ds.edit { it[keySeekGesture] = v } }
+    suspend fun setDisableVolumeKeys(v: Boolean) { ds.edit { it[keyDisableVolumeKeys] = v } }
     suspend fun setLayoutMode(n: Int) { ds.edit { it[keyLayoutMode] = n.coerceIn(1, 4) } }
     suspend fun setSoloAudio(v: Boolean) { ds.edit { it[keySoloAudio] = v } }
     suspend fun setSoloIndex(idx: Int) { ds.edit { it[keySoloIndex] = idx.coerceIn(0, 3) } }

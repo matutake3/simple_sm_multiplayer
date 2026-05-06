@@ -9,11 +9,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LongState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.app.Activity
 import jp.simplist.smmultiplayer.BuildConfig
 import jp.simplist.smmultiplayer.R
+import jp.simplist.smmultiplayer.billing.BillingManager
+import jp.simplist.smmultiplayer.trial.TrialManager
 
 /**
  * Full-screen settings overlay that mirrors the layout convention used by
@@ -30,6 +37,9 @@ fun SettingsScreen(
     autoLoop: Boolean,
     volumeGesture: Boolean,
     seekGesture: Boolean,
+    disableVolumeKeys: Boolean,
+    billing: BillingManager,
+    trialTick: LongState,
     onShowVolumeIndicator: (Boolean) -> Unit,
     onShowSeekIndicator: (Boolean) -> Unit,
     onControlsAlwaysVisible: (Boolean) -> Unit,
@@ -38,6 +48,7 @@ fun SettingsScreen(
     onAutoLoop: (Boolean) -> Unit,
     onVolumeGesture: (Boolean) -> Unit,
     onSeekGesture: (Boolean) -> Unit,
+    onDisableVolumeKeys: (Boolean) -> Unit,
     onOpenUsageGuide: () -> Unit,
     onOpenFaq: () -> Unit,
     onBack: () -> Unit,
@@ -99,6 +110,12 @@ fun SettingsScreen(
                 checked = seekGesture,
                 onCheckedChange = onSeekGesture,
             )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_disable_volume_keys),
+                summary = stringResource(R.string.setting_disable_volume_keys_summary),
+                checked = disableVolumeKeys,
+                onCheckedChange = onDisableVolumeKeys,
+            )
 
             // ---- Section: 再生 ----
             SettingsSectionHeader(stringResource(R.string.settings_section_playback))
@@ -120,6 +137,45 @@ fun SettingsScreen(
                 checked = fastSeek,
                 onCheckedChange = onFastSeek,
             )
+
+            // ---- Section: 購入 ----
+            SettingsSectionHeader(stringResource(R.string.settings_section_purchase))
+            val tick by trialTick
+            val trial = remember(tick) { TrialManager.get() }
+            val state = remember(tick) { trial.state() }
+            val price = billing.formattedPrice() ?: stringResource(R.string.price_fallback)
+
+            val statusValue = when {
+                trial.isTrialBypass() -> stringResource(R.string.trial_bypass_badge)
+                state == TrialManager.State.PURCHASED ->
+                    stringResource(R.string.purchase_active)
+                state == TrialManager.State.ACTIVE -> {
+                    val hours = trial.remainingHours().coerceAtLeast(0)
+                    if (hours > 0) {
+                        stringResource(R.string.trial_remaining_hours, hours)
+                    } else {
+                        val mins = trial.remainingMinutes().coerceAtLeast(0)
+                        if (mins > 0) stringResource(R.string.trial_remaining_minutes, mins)
+                        else stringResource(R.string.trial_active_today)
+                    }
+                }
+                else -> stringResource(R.string.trial_expired_title)
+            }
+            SettingsInfoRow(
+                title = stringResource(R.string.settings_purchase_status),
+                value = statusValue,
+            )
+            if (state != TrialManager.State.PURCHASED && !trial.isTrialBypass()) {
+                val activity = LocalContext.current as? Activity
+                SettingsNavigationRow(
+                    title = stringResource(R.string.settings_purchase_buy) + "（" + price + "）",
+                    onClick = { activity?.let { billing.launchPurchase(it) } },
+                )
+                SettingsNavigationRow(
+                    title = stringResource(R.string.purchase_restore),
+                    onClick = { billing.queryPurchasesOnce() },
+                )
+            }
 
             // ---- Section: アプリ情報 ----
             SettingsSectionHeader(stringResource(R.string.settings_section_app_info))

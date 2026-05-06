@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -42,6 +43,7 @@ fun PresetsDialog(
     var saveOpen by remember { mutableStateOf(false) }
     var loadConfirm by remember { mutableStateOf<LayoutPreset?>(null) }
     var deleteConfirm by remember { mutableStateOf<LayoutPreset?>(null) }
+    var renameTarget by remember { mutableStateOf<LayoutPreset?>(null) }
     val scrollState = rememberScrollState()
 
     AlertDialog(
@@ -67,6 +69,7 @@ fun PresetsDialog(
                         PresetRow(
                             preset = p,
                             onLoad = { loadConfirm = p },
+                            onRename = { renameTarget = p },
                             onDelete = { deleteConfirm = p },
                         )
                     }
@@ -86,13 +89,28 @@ fun PresetsDialog(
     )
 
     if (saveOpen) {
-        SavePresetDialog(
-            defaultName = viewModel.defaultPresetName(),
-            onSave = { name ->
+        PresetNameDialog(
+            title = stringResource(R.string.preset_save_dialog_title),
+            initialName = viewModel.defaultPresetName(),
+            confirmLabel = stringResource(R.string.action_save),
+            onConfirm = { name ->
                 viewModel.savePreset(name)
                 saveOpen = false
             },
             onDismiss = { saveOpen = false },
+        )
+    }
+
+    renameTarget?.let { preset ->
+        PresetNameDialog(
+            title = stringResource(R.string.preset_rename_dialog_title),
+            initialName = preset.name,
+            confirmLabel = stringResource(R.string.action_save),
+            onConfirm = { name ->
+                viewModel.renamePreset(preset.id, name)
+                renameTarget = null
+            },
+            onDismiss = { renameTarget = null },
         )
     }
 
@@ -130,6 +148,7 @@ fun PresetsDialog(
 private fun PresetRow(
     preset: LayoutPreset,
     onLoad: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Row(
@@ -156,22 +175,31 @@ private fun PresetRow(
         IconButton(onClick = onLoad) {
             Icon(Icons.Filled.PlayCircle, stringResource(R.string.preset_load))
         }
+        IconButton(onClick = onRename) {
+            Icon(Icons.Filled.Edit, stringResource(R.string.action_edit))
+        }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, stringResource(R.string.action_delete))
         }
     }
 }
 
+/**
+ * Shared name-input dialog used both for "Save current as preset" and for
+ * renaming an existing preset. Different titles / confirm labels per use.
+ */
 @Composable
-private fun SavePresetDialog(
-    defaultName: String,
-    onSave: (String) -> Unit,
+private fun PresetNameDialog(
+    title: String,
+    initialName: String,
+    confirmLabel: String,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var name by remember { mutableStateOf(defaultName) }
+    var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.preset_save_dialog_title)) },
+        title = { Text(title) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -182,9 +210,7 @@ private fun SavePresetDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name) }) {
-                Text(stringResource(R.string.action_save))
-            }
+            TextButton(onClick = { onConfirm(name) }) { Text(confirmLabel) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {

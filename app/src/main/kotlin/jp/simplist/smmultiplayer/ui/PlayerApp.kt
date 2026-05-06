@@ -10,28 +10,42 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.LongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.simplist.smmultiplayer.PlayerViewModel
 import jp.simplist.smmultiplayer.R
+import jp.simplist.smmultiplayer.billing.BillingManager
+import jp.simplist.smmultiplayer.trial.TrialManager
 import jp.simplist.smmultiplayer.ui.theme.PlayerBg
 import kotlinx.coroutines.delay
 
@@ -42,7 +56,17 @@ private enum class FullScreenOverlay { None, Settings, UsageGuide, Faq }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PlayerApp(viewModel: PlayerViewModel) {
+fun PlayerApp(
+    viewModel: PlayerViewModel,
+    billing: BillingManager,
+    trialTick: LongState,
+    onCloseApp: () -> Unit,
+) {
+    // Re-evaluate trial entitlement whenever MainActivity bumps the tick
+    // (onResume / purchase callback). canUsePlayback() is cheap (SharedPreferences).
+    val tick by trialTick
+    val canUsePlayback = remember(tick) { TrialManager.get().canUsePlayback() }
+
     val slots by viewModel.slots.collectAsStateWithLifecycle()
     val layoutMode by viewModel.layoutMode.collectAsStateWithLifecycle()
     val soloAudio by viewModel.soloAudio.collectAsStateWithLifecycle()
@@ -56,6 +80,10 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val autoLoop by viewModel.autoLoop.collectAsStateWithLifecycle()
     val volumeGesture by viewModel.volumeGesture.collectAsStateWithLifecycle()
     val seekGesture by viewModel.seekGesture.collectAsStateWithLifecycle()
+    val disableVolumeKeys by viewModel.disableVolumeKeys.collectAsStateWithLifecycle()
+    val locked by viewModel.locked.collectAsStateWithLifecycle()
+    // Read-by-value inside long-lived pointerInput coroutines.
+    val lockedState by rememberUpdatedState(locked)
 
     // Full-screen overlay screens (settings / usage / faq) — at most one at a time.
     var fullScreen by remember { mutableStateOf<FullScreenOverlay>(FullScreenOverlay.None) }
@@ -101,6 +129,9 @@ fun PlayerApp(viewModel: PlayerViewModel) {
                         requireUnconsumed = false,
                         pass = PointerEventPass.Initial,
                     )
+                    // Suppress the TopBar pull-down trigger entirely while
+                    // the screen is locked.
+                    if (lockedState) return@awaitEachGesture
                     if (down.position.y > triggerHeightPx) return@awaitEachGesture
                     val pointerId = down.id
                     while (true) {
@@ -136,6 +167,56 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Lock-mode overlay — declared BEFORE the TopBar's AnimatedVisibility
+        // so that the TopBar (when somehow visible) renders above the
+        // overlay and is still interactive. We additionally skip the
+        // pull-down gesture above when locked, so this is mostly defence
+        // in depth.
+        if (locked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        // Swallow every tap / drag gesture on screen.
+                        // Long-press is the explicit unlock affordance.
+                        detectTapGestures(
+                            onLongPress = { viewModel.setLocked(false) },
+                            onTap = { /* swallowed */ },
+                            onDoubleTap = { /* swallowed */ },
+                            onPress = { /* swallowed */ },
+                        )
+                    },
+            ) {
+                // Lock indicator pill in the top-right corner so the user
+                // sees at a glance that the screen is locked.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+                        .padding(12.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = stringResource(jp.simplist.smmultiplayer.R.string.action_lock),
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = stringResource(jp.simplist.smmultiplayer.R.string.action_unlock_hint),
+                            color = Color.White,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = topBarVisible,
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
@@ -160,6 +241,10 @@ fun PlayerApp(viewModel: PlayerViewModel) {
                 onToggleSync = { viewModel.toggleSyncPlayback(); touch() },
                 onOpenPresets = { presetsOpen = true; touch() },
                 onOpenSettings = { fullScreen = FullScreenOverlay.Settings; touch() },
+                onLock = {
+                    viewModel.setLocked(true)
+                    topBarVisible = false
+                },
                 onClose = { topBarVisible = false },
             )
         }
@@ -176,6 +261,9 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             autoLoop = autoLoop,
             volumeGesture = volumeGesture,
             seekGesture = seekGesture,
+            disableVolumeKeys = disableVolumeKeys,
+            billing = billing,
+            trialTick = trialTick,
             onShowVolumeIndicator = { viewModel.setShowVolumeIndicator(it) },
             onShowSeekIndicator = { viewModel.setShowSeekIndicator(it) },
             onControlsAlwaysVisible = { viewModel.setControlsAlwaysVisible(it) },
@@ -184,6 +272,7 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             onAutoLoop = { viewModel.setAutoLoop(it) },
             onVolumeGesture = { viewModel.setVolumeGesture(it) },
             onSeekGesture = { viewModel.setSeekGesture(it) },
+            onDisableVolumeKeys = { viewModel.setDisableVolumeKeys(it) },
             onOpenUsageGuide = { fullScreen = FullScreenOverlay.UsageGuide },
             onOpenFaq = { fullScreen = FullScreenOverlay.Faq },
             onBack = { fullScreen = FullScreenOverlay.None },
@@ -213,6 +302,16 @@ fun PlayerApp(viewModel: PlayerViewModel) {
         PresetsDialog(
             viewModel = viewModel,
             onDismiss = { presetsOpen = false },
+        )
+    }
+
+    // Trial-expired modal. Sits on top of every other overlay so the user
+    // cannot interact with playback / settings until they purchase or close
+    // the app. The dialog itself is non-cancelable.
+    if (!canUsePlayback) {
+        UnlockDialog(
+            billing = billing,
+            onCloseApp = onCloseApp,
         )
     }
 }

@@ -125,7 +125,18 @@ fun PlayerCell(
             .pointerInput(hasVideo) {
                 detectTapGestures(
                     onTap = {
-                        if (!hasVideo) onPickVideo() else controlsVisible = !controlsVisible
+                        if (!hasVideo) {
+                            onPickVideo()
+                        } else if (latestSoloAudio && !latestIsSoloTarget) {
+                            // Solo audio mode: tapping a non-target cell makes
+                            // it the audio source. Force-show controls so the
+                            // ♪ 音声中 chip on this cell becomes the visual
+                            // confirmation of the switch.
+                            onActivateSolo()
+                            if (!controlsVisible) controlsVisible = true
+                        } else {
+                            controlsVisible = !controlsVisible
+                        }
                     },
                 )
             }

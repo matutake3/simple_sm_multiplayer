@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup rules.
+  trial_state / purchase_state は Google Drive 経由でユーザーアカウントに紐付けて
+  バックアップ＆復元する。これにより「アンインストール → 再インストール」しても
+  24h トライアル開始時刻はリセットされない。
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="trial_state.xml" />
+    <include domain="sharedpref" path="purchase_state.xml" />
+    <!-- Exclude caches -->
+    <exclude domain="database" path="." />
+    <exclude domain="file" path="cache/" />
+</full-backup-content>

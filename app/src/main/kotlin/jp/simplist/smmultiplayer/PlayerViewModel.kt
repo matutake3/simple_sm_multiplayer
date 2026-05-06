@@ -114,6 +114,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         repo.volumeGesture.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val seekGesture: StateFlow<Boolean> =
         repo.seekGesture.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val disableVolumeKeys: StateFlow<Boolean> =
+        repo.disableVolumeKeys.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Ephemeral lock-mode flag (not persisted). */
+    private val _locked = MutableStateFlow(false)
+    val locked: StateFlow<Boolean> = _locked.asStateFlow()
+
+    /**
+     * True iff any visible slot is currently playing. Powers the combined
+     * play/pause toggle button on the TopBar — one button instead of two,
+     * icon flips based on this value.
+     */
+    val anyPlaying: StateFlow<Boolean> =
+        _slots.map { list -> list.any { it.isPlaying } }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val layoutMode: StateFlow<Int> =
         repo.layoutMode.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
     val soloAudio: StateFlow<Boolean> =
@@ -574,6 +589,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Change the display name of an existing preset. Empty/blank ignored. */
+    fun renamePreset(id: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val updated = presets.value.map { p ->
+                if (p.id == id) p.copy(name = trimmed) else p
+            }
+            repo.setPresetsJson(updated.toJsonArray().toString())
+        }
+    }
+
     /**
      * Apply a preset: clear current slots, restore each slot's URI / volume /
      * resize mode, and apply the layout / solo-audio settings.
@@ -663,6 +690,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSeekGesture(v: Boolean) =
         viewModelScope.launch { repo.setSeekGesture(v) }.let { Unit }
+
+    fun setDisableVolumeKeys(v: Boolean) =
+        viewModelScope.launch { repo.setDisableVolumeKeys(v) }.let { Unit }
+
+    fun setLocked(v: Boolean) {
+        _locked.value = v
+    }
 
     private fun updateSlot(idx: Int, transform: (PlayerSlotState) -> PlayerSlotState) {
         val list = _slots.value.toMutableList()

@@ -43,6 +43,7 @@ fun UsageGuideScreen(onBack: () -> Unit) {
             Topic(R.string.usage_speed_heading, R.string.usage_speed_body)
             Topic(R.string.usage_resize_heading, R.string.usage_resize_body)
             Topic(R.string.usage_preset_heading, R.string.usage_preset_body)
+            Topic(R.string.usage_lock_heading, R.string.usage_lock_body)
             Spacer(Modifier.fillMaxWidth().height(32.dp))
         }
     }
