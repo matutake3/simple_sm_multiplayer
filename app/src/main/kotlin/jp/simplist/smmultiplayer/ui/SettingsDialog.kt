@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -25,16 +28,24 @@ fun SettingsDialog(
     showVolumeIndicator: Boolean,
     showSeekIndicator: Boolean,
     controlsAlwaysVisible: Boolean,
+    fastSeek: Boolean,
     onShowVolumeIndicator: (Boolean) -> Unit,
     onShowSeekIndicator: (Boolean) -> Unit,
     onControlsAlwaysVisible: (Boolean) -> Unit,
+    onFastSeek: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.title_settings)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 SettingRow(
                     title = stringResource(R.string.setting_volume_indicator),
                     summary = stringResource(R.string.setting_volume_indicator_summary),
@@ -53,10 +64,16 @@ fun SettingsDialog(
                     checked = controlsAlwaysVisible,
                     onCheckedChange = onControlsAlwaysVisible,
                 )
+                SettingRow(
+                    title = stringResource(R.string.setting_fast_seek),
+                    summary = stringResource(R.string.setting_fast_seek_summary),
+                    checked = fastSeek,
+                    onCheckedChange = onFastSeek,
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("閉じる") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }

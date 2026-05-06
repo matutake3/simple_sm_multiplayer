@@ -20,6 +20,7 @@ class SettingsRepository(context: Context) {
     private val keyVolumeIndicator = booleanPreferencesKey("show_volume_indicator")
     private val keySeekIndicator = booleanPreferencesKey("show_seek_indicator")
     private val keyControlsAlwaysVisible = booleanPreferencesKey("controls_always_visible")
+    private val keyFastSeek = booleanPreferencesKey("fast_seek")
     private val keyLayoutMode = intPreferencesKey("layout_mode")
     private val keySoloAudio = booleanPreferencesKey("solo_audio")
     private val keySoloIndex = intPreferencesKey("solo_index")
@@ -35,6 +36,8 @@ class SettingsRepository(context: Context) {
         ds.data.map { it[keySeekIndicator] ?: true }
     val controlsAlwaysVisible: Flow<Boolean> =
         ds.data.map { it[keyControlsAlwaysVisible] ?: false }
+    val fastSeek: Flow<Boolean> =
+        ds.data.map { it[keyFastSeek] ?: false }
     val layoutMode: Flow<Int> =
         ds.data.map { (it[keyLayoutMode] ?: 1).coerceIn(1, 4) }
     val soloAudio: Flow<Boolean> =
@@ -59,6 +62,7 @@ class SettingsRepository(context: Context) {
     suspend fun setShowVolumeIndicator(v: Boolean) { ds.edit { it[keyVolumeIndicator] = v } }
     suspend fun setShowSeekIndicator(v: Boolean) { ds.edit { it[keySeekIndicator] = v } }
     suspend fun setControlsAlwaysVisible(v: Boolean) { ds.edit { it[keyControlsAlwaysVisible] = v } }
+    suspend fun setFastSeek(v: Boolean) { ds.edit { it[keyFastSeek] = v } }
     suspend fun setLayoutMode(n: Int) { ds.edit { it[keyLayoutMode] = n.coerceIn(1, 4) } }
     suspend fun setSoloAudio(v: Boolean) { ds.edit { it[keySoloAudio] = v } }
     suspend fun setSoloIndex(idx: Int) { ds.edit { it[keySoloIndex] = idx.coerceIn(0, 3) } }

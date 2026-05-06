@@ -14,6 +14,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import jp.simplist.smmultiplayer.data.LayoutPreset
 import jp.simplist.smmultiplayer.data.PresetSlot
 import jp.simplist.smmultiplayer.data.SettingsRepository
@@ -103,6 +104,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         repo.showSeekIndicator.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val controlsAlwaysVisible: StateFlow<Boolean> =
         repo.controlsAlwaysVisible.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val fastSeek: StateFlow<Boolean> =
+        repo.fastSeek.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val layoutMode: StateFlow<Int> =
         repo.layoutMode.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
     val soloAudio: StateFlow<Boolean> =
@@ -192,6 +195,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                         stopAndCache(i)
                     }
                 }
+            }
+        }
+
+        // Apply seek-parameters mode (exact vs nearest-keyframe) to all
+        // ExoPlayers whenever the toggle changes.
+        viewModelScope.launch {
+            fastSeek.collect { fast ->
+                val params = if (fast) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT
+                players.forEach { runCatching { it.setSeekParameters(params) } }
             }
         }
 
@@ -419,7 +431,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         updateSlot(slotIndex) { it.copy(volume = v.coerceIn(0f, 1f)) }
     }
 
-    /** Apply a new playback speed to the given slot, persisting the choice. */
+/** Apply a new playback speed to the given slot, persisting the choice. */
     fun setPlaybackSpeed(slotIndex: Int, speed: Float) {
         if (slotIndex !in 0 until SLOT_COUNT) return
         val coerced = speed.coerceIn(0.25f, 4.0f)
@@ -550,6 +562,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setControlsAlwaysVisible(v: Boolean) =
         viewModelScope.launch { repo.setControlsAlwaysVisible(v) }.let { Unit }
+
+    fun setFastSeek(v: Boolean) =
+        viewModelScope.launch { repo.setFastSeek(v) }.let { Unit }
 
     private fun updateSlot(idx: Int, transform: (PlayerSlotState) -> PlayerSlotState) {
         val list = _slots.value.toMutableList()

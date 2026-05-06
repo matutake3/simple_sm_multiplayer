@@ -69,6 +69,8 @@
     <string name="setting_seek_indicator_summary">横ドラッグで再生位置を変えたとき、画面中央に時刻を表示</string>
     <string name="setting_controls_always_visible">操作ボタンを常に表示</string>
     <string name="setting_controls_always_visible_summary">タップで表示・非表示を切り替えるかわりに、常時表示</string>
+    <string name="setting_fast_seek">高速シーク (精度より速度を優先)</string>
+    <string name="setting_fast_seek_summary">最寄りのキーフレームへシークします。シークバー・スキップが大きな動画で大幅に速くなりますが、フレーム送りはキーフレーム単位のジャンプになります</string>
 
     <!-- Empty state -->
     <string name="empty_slot_hint">タップして動画を選択</string>

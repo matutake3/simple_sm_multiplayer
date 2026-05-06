@@ -39,11 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import jp.simplist.smmultiplayer.R
 import jp.simplist.smmultiplayer.player.PlaybackSpeeds
 import jp.simplist.smmultiplayer.player.PlayerSlotState
 import jp.simplist.smmultiplayer.player.ResizeMode

@@ -48,6 +48,7 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val showVol by viewModel.showVolumeIndicator.collectAsStateWithLifecycle()
     val showSeek by viewModel.showSeekIndicator.collectAsStateWithLifecycle()
     val ctrlAlways by viewModel.controlsAlwaysVisible.collectAsStateWithLifecycle()
+    val fastSeek by viewModel.fastSeek.collectAsStateWithLifecycle()
 
     var settingsOpen by remember { mutableStateOf(false) }
     var presetsOpen by remember { mutableStateOf(false) }
@@ -159,9 +160,11 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             showVolumeIndicator = showVol,
             showSeekIndicator = showSeek,
             controlsAlwaysVisible = ctrlAlways,
+            fastSeek = fastSeek,
             onShowVolumeIndicator = { viewModel.setShowVolumeIndicator(it) },
             onShowSeekIndicator = { viewModel.setShowSeekIndicator(it) },
             onControlsAlwaysVisible = { viewModel.setControlsAlwaysVisible(it) },
+            onFastSeek = { viewModel.setFastSeek(it) },
             onDismiss = { settingsOpen = false },
         )
     }
