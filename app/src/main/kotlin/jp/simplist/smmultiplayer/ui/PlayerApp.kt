@@ -37,6 +37,9 @@ import kotlinx.coroutines.delay
 
 private const val TOP_BAR_AUTO_HIDE_MS = 5_000L
 
+/** Mutually-exclusive full-screen overlays (Settings / Usage / FAQ). */
+private enum class FullScreenOverlay { None, Settings, UsageGuide, Faq }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerApp(viewModel: PlayerViewModel) {
@@ -54,7 +57,8 @@ fun PlayerApp(viewModel: PlayerViewModel) {
     val volumeGesture by viewModel.volumeGesture.collectAsStateWithLifecycle()
     val seekGesture by viewModel.seekGesture.collectAsStateWithLifecycle()
 
-    var settingsOpen by remember { mutableStateOf(false) }
+    // Full-screen overlay screens (settings / usage / faq) — at most one at a time.
+    var fullScreen by remember { mutableStateOf<FullScreenOverlay>(FullScreenOverlay.None) }
     var presetsOpen by remember { mutableStateOf(false) }
     var clearAllConfirmOpen by remember { mutableStateOf(false) }
     var pickerForSlot by remember { mutableStateOf<Int?>(null) }
@@ -155,14 +159,15 @@ fun PlayerApp(viewModel: PlayerViewModel) {
                 onToggleSolo = { viewModel.toggleSoloAudio(); touch() },
                 onToggleSync = { viewModel.toggleSyncPlayback(); touch() },
                 onOpenPresets = { presetsOpen = true; touch() },
-                onOpenSettings = { settingsOpen = true; touch() },
+                onOpenSettings = { fullScreen = FullScreenOverlay.Settings; touch() },
                 onClose = { topBarVisible = false },
             )
         }
     }
 
-    if (settingsOpen) {
-        SettingsDialog(
+    when (fullScreen) {
+        FullScreenOverlay.None -> Unit
+        FullScreenOverlay.Settings -> SettingsScreen(
             showVolumeIndicator = showVol,
             showSeekIndicator = showSeek,
             controlsAlwaysVisible = ctrlAlways,
@@ -179,7 +184,15 @@ fun PlayerApp(viewModel: PlayerViewModel) {
             onAutoLoop = { viewModel.setAutoLoop(it) },
             onVolumeGesture = { viewModel.setVolumeGesture(it) },
             onSeekGesture = { viewModel.setSeekGesture(it) },
-            onDismiss = { settingsOpen = false },
+            onOpenUsageGuide = { fullScreen = FullScreenOverlay.UsageGuide },
+            onOpenFaq = { fullScreen = FullScreenOverlay.Faq },
+            onBack = { fullScreen = FullScreenOverlay.None },
+        )
+        FullScreenOverlay.UsageGuide -> UsageGuideScreen(
+            onBack = { fullScreen = FullScreenOverlay.Settings },
+        )
+        FullScreenOverlay.Faq -> FaqScreen(
+            onBack = { fullScreen = FullScreenOverlay.Settings },
         )
     }
 

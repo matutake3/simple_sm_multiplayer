@@ -1,30 +1,27 @@
 package jp.simplist.smmultiplayer.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import jp.simplist.smmultiplayer.BuildConfig
 import jp.simplist.smmultiplayer.R
 
+/**
+ * Full-screen settings overlay that mirrors the layout convention used by
+ * the rest of the Morphyca apps: top-of-screen Usage Guide / FAQ shortcuts,
+ * followed by toggles grouped into sections.
+ */
 @Composable
-fun SettingsDialog(
+fun SettingsScreen(
     showVolumeIndicator: Boolean,
     showSeekIndicator: Boolean,
     controlsAlwaysVisible: Boolean,
@@ -41,95 +38,97 @@ fun SettingsDialog(
     onAutoLoop: (Boolean) -> Unit,
     onVolumeGesture: (Boolean) -> Unit,
     onSeekGesture: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
+    onOpenUsageGuide: () -> Unit,
+    onOpenFaq: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    val scrollState = rememberScrollState()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.title_settings)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(scrollState)
-                    .simpleVerticalScrollbar(scrollState),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SettingRow(
-                    title = stringResource(R.string.setting_volume_indicator),
-                    summary = stringResource(R.string.setting_volume_indicator_summary),
-                    checked = showVolumeIndicator,
-                    onCheckedChange = onShowVolumeIndicator,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_seek_indicator),
-                    summary = stringResource(R.string.setting_seek_indicator_summary),
-                    checked = showSeekIndicator,
-                    onCheckedChange = onShowSeekIndicator,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_controls_always_visible),
-                    summary = stringResource(R.string.setting_controls_always_visible_summary),
-                    checked = controlsAlwaysVisible,
-                    onCheckedChange = onControlsAlwaysVisible,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_volume_gesture),
-                    summary = stringResource(R.string.setting_volume_gesture_summary),
-                    checked = volumeGesture,
-                    onCheckedChange = onVolumeGesture,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_seek_gesture),
-                    summary = stringResource(R.string.setting_seek_gesture_summary),
-                    checked = seekGesture,
-                    onCheckedChange = onSeekGesture,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_sync_speed),
-                    summary = stringResource(R.string.setting_sync_speed_summary),
-                    checked = syncSpeed,
-                    onCheckedChange = onSyncSpeed,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_auto_loop),
-                    summary = stringResource(R.string.setting_auto_loop_summary),
-                    checked = autoLoop,
-                    onCheckedChange = onAutoLoop,
-                )
-                SettingRow(
-                    title = stringResource(R.string.setting_fast_seek),
-                    summary = stringResource(R.string.setting_fast_seek_summary),
-                    checked = fastSeek,
-                    onCheckedChange = onFastSeek,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
-        },
-    )
-}
-
-@Composable
-private fun SettingRow(
-    title: String,
-    summary: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    SettingsScaffold(
+        title = stringResource(R.string.title_settings),
+        onBack = onBack,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(2.dp))
-            Text(summary, fontSize = 11.sp)
+        val scrollState = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .simpleVerticalScrollbar(scrollState)
+                .padding(bottom = 32.dp),
+        ) {
+            // Top-level shortcuts (chevron rows), exactly like other Morphyca apps.
+            SettingsNavigationRow(
+                title = stringResource(R.string.title_usage_guide),
+                onClick = onOpenUsageGuide,
+            )
+            SettingsNavigationRow(
+                title = stringResource(R.string.title_faq),
+                onClick = onOpenFaq,
+            )
+
+            // ---- Section: 表示 ----
+            SettingsSectionHeader(stringResource(R.string.settings_section_display))
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_volume_indicator),
+                summary = stringResource(R.string.setting_volume_indicator_summary),
+                checked = showVolumeIndicator,
+                onCheckedChange = onShowVolumeIndicator,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_seek_indicator),
+                summary = stringResource(R.string.setting_seek_indicator_summary),
+                checked = showSeekIndicator,
+                onCheckedChange = onShowSeekIndicator,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_controls_always_visible),
+                summary = stringResource(R.string.setting_controls_always_visible_summary),
+                checked = controlsAlwaysVisible,
+                onCheckedChange = onControlsAlwaysVisible,
+            )
+
+            // ---- Section: 操作 ----
+            SettingsSectionHeader(stringResource(R.string.settings_section_gesture))
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_volume_gesture),
+                summary = stringResource(R.string.setting_volume_gesture_summary),
+                checked = volumeGesture,
+                onCheckedChange = onVolumeGesture,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_seek_gesture),
+                summary = stringResource(R.string.setting_seek_gesture_summary),
+                checked = seekGesture,
+                onCheckedChange = onSeekGesture,
+            )
+
+            // ---- Section: 再生 ----
+            SettingsSectionHeader(stringResource(R.string.settings_section_playback))
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_auto_loop),
+                summary = stringResource(R.string.setting_auto_loop_summary),
+                checked = autoLoop,
+                onCheckedChange = onAutoLoop,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_sync_speed),
+                summary = stringResource(R.string.setting_sync_speed_summary),
+                checked = syncSpeed,
+                onCheckedChange = onSyncSpeed,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.setting_fast_seek),
+                summary = stringResource(R.string.setting_fast_seek_summary),
+                checked = fastSeek,
+                onCheckedChange = onFastSeek,
+            )
+
+            // ---- Section: アプリ情報 ----
+            SettingsSectionHeader(stringResource(R.string.settings_section_app_info))
+            SettingsInfoRow(
+                title = stringResource(R.string.settings_app_version),
+                value = BuildConfig.VERSION_NAME,
+            )
+
+            Spacer(modifier = Modifier.fillMaxWidth().height(24.dp))
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

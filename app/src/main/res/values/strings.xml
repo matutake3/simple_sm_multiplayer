@@ -66,6 +66,14 @@
 
     <!-- Settings -->
     <string name="title_settings">設定</string>
+    <string name="title_usage_guide">使い方</string>
+    <string name="title_faq">よくある質問</string>
+    <string name="settings_section_display">表示</string>
+    <string name="settings_section_gesture">操作</string>
+    <string name="settings_section_playback">再生</string>
+    <string name="settings_section_app_info">アプリ情報</string>
+    <string name="settings_app_version">バージョン</string>
+    <string name="action_back">戻る</string>
     <string name="setting_volume_indicator">音量インジケーターを表示</string>
     <string name="setting_volume_indicator_summary">縦ドラッグで音量を変えたとき、画面中央に音量を表示</string>
     <string name="setting_seek_indicator">シークインジケーターを表示</string>
@@ -86,4 +94,46 @@
     <!-- Empty state -->
     <string name="empty_slot_hint">タップして動画を選択</string>
     <string name="placeholder_no_video">未選択</string>
+
+    <!-- Usage guide content -->
+    <string name="usage_intro_heading">はじめに</string>
+    <string name="usage_intro_body">最大 4 つの動画を同時に再生・比較するためのプレイヤーです。スポーツやダンスのマルチアングル分析、楽器練習、映像のテイク比較などに使えます。</string>
+    <string name="usage_pick_heading">動画の追加</string>
+    <string name="usage_pick_body">各セルの「タップして動画を選択」を押すとファイルピッカーが開き、端末内の動画を選べます。一度選んだ動画は端末再起動後も保持されます。</string>
+    <string name="usage_layout_heading">レイアウト切替</string>
+    <string name="usage_layout_body">上部メニューの 1/2/3/4 で表示する動画数を切り替えできます。縦持ち・横持ちどちらでも自動でレイアウトが調整されます。</string>
+    <string name="usage_topbar_heading">操作 UI の出し方</string>
+    <string name="usage_topbar_body">画面の上端を下にスワイプすると、上部メニュー (全再生・レイアウト・設定など) が表示されます。5 秒経つと自動で隠れます。\n\n各セルをタップすると、そのセル内の操作ボタン (再生・スキップ・シークバー・A/B など) が表示されます。</string>
+    <string name="usage_gesture_heading">ジェスチャ操作</string>
+    <string name="usage_gesture_body">セル上で指を上下に動かすと音量、左右に動かすとシーク (再生位置変更) です。設定で個別に無効化できます。</string>
+    <string name="usage_ab_heading">A/B ループ</string>
+    <string name="usage_ab_body">操作 UI の「A」「B」ボタンで、ループしたい範囲の開始点と終了点を設定します。両方が設定されると自動でループ開始。「クリア」で解除できます。</string>
+    <string name="usage_sync_heading">同期再生モード</string>
+    <string name="usage_sync_body">上部メニューの同期アイコンで切替。ON のとき、ある動画の再生・停止・シークが他のすべてに同時適用されます。設定で「再生速度も同期」にすることもできます。</string>
+    <string name="usage_solo_heading">ソロ音声モード</string>
+    <string name="usage_solo_body">上部メニューのスピーカーアイコンで切替。ON のとき、選択された 1 つの動画だけが音を出します。他のセルで縦ドラッグすると音声出力が切り替わります。</string>
+    <string name="usage_speed_heading">再生速度変更</string>
+    <string name="usage_speed_body">操作 UI の「1.0x」をタップすると 0.25x〜2.0x の選択肢が出ます。セルごとに個別設定できます。</string>
+    <string name="usage_resize_heading">アスペクト比モード</string>
+    <string name="usage_resize_body">操作 UI の表示モードアイコンで「フィット」「ズーム」「フィル」を切替できます。黒帯を消したい場合は「ズーム」を選んでください。</string>
+    <string name="usage_preset_heading">レイアウトプリセット</string>
+    <string name="usage_preset_body">上部メニューのしおりアイコンから、現在の構成を名前を付けて保存できます。読み込むと、動画の組み合わせ・レイアウト・各種設定が一括で復元されます。</string>
+
+    <!-- FAQ content -->
+    <string name="faq_q_format">Q. 動画が再生できません</string>
+    <string name="faq_a_format">A. ファイルが壊れているか、対応していない形式の可能性があります。一般的な MP4 / H.264 / HEVC 形式であれば再生できます。</string>
+    <string name="faq_q_stutter">Q. 4 つ同時再生でカクつきます</string>
+    <string name="faq_a_stutter">A. 動画のビットレートと端末性能の組み合わせによります。動画を再エンコードして解像度・ビットレートを下げるとスムーズになります。</string>
+    <string name="faq_q_seek">Q. 大きい動画でシークが遅いです</string>
+    <string name="faq_a_seek">A. 動画のキーフレーム間隔が長いことが原因です。設定で「高速シーク」を ON にすると速くなりますが、シーク位置はキーフレーム単位 (数秒単位) になります。</string>
+    <string name="faq_q_io_contention">Q. 急に再生やシークが極端に重くなりました</string>
+    <string name="faq_a_io_contention">A. 他のアプリがバックグラウンドで大量のファイル操作 (コピー・移動・ダウンロード・アップロード・クラウド同期など) を行っていると、内蔵ストレージの読み出し帯域が奪われ、動画の再生・シークが極端に遅くなることがあります。\n\n大きい動画ファイルほど影響を受けやすいため、他アプリのファイル処理が完了してから再度お試しください。タスク一覧から不要なバックグラウンドアプリを終了させると改善することがあります。</string>
+    <string name="faq_q_preset">Q. プリセットを読み込んだら動画が見つかりません</string>
+    <string name="faq_a_preset">A. 保存後にファイルを移動・削除した可能性があります。動画ファイルを元の場所に戻すか、新しい場所のファイルを再選択してください。</string>
+    <string name="faq_q_audio">Q. 音が鳴りません</string>
+    <string name="faq_a_audio">A. ソロ音声モード中は、選択中のセル (♪ 音声中 と表示) のみ音が出ます。各セルの音量と端末の音量設定もご確認ください。</string>
+    <string name="faq_q_loop">Q. 動画が自動でループします</string>
+    <string name="faq_a_loop">A. 設定の「動画を自動でループ」を OFF にすると、動画の終端で停止するようになります。A/B ループはこの設定とは独立で動作します。</string>
+    <string name="faq_q_oom">Q. 大きい動画を 4 つ追加するとアプリが落ちます</string>
+    <string name="faq_a_oom">A. メモリ不足の可能性があります。すべてを 1080p 高ビットレートで同時に再生するのは厳しい場合があります。720p 程度に再エンコードしてからご利用ください。</string>
 </resources>
