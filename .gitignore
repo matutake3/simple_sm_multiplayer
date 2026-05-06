@@ -1,0 +1,27 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/app/build
+/app/release
+*.keystore
+*.jks
+
+# Editor local history (Cursor/VS Code)
+.history/
+
+# Claude Code local permissions (machine-specific paths)
+.claude/settings.local.json
+
+# APK/AAB artifacts (if present outside ignored build dirs)
+*.apk
+*.aab
+
+# Local build logs
+build_log.txt

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">シンプルマルチSMプレイヤー</string>
+
+    <!-- Top bar -->
+    <string name="action_play_all">全再生</string>
+    <string name="action_pause_all">全停止</string>
+    <string name="action_layout_1">1画面</string>
+    <string name="action_layout_2">2画面</string>
+    <string name="action_layout_3">3画面</string>
+    <string name="action_layout_4">4画面</string>
+    <string name="action_solo_audio_on">ソロ音声: ON</string>
+    <string name="action_solo_audio_off">ソロ音声: OFF</string>
+    <string name="action_settings">設定</string>
+
+    <!-- Per-cell -->
+    <string name="action_pick_video">動画を選択</string>
+    <string name="action_change_video">動画を変更</string>
+    <string name="action_remove_video">動画を解除</string>
+    <string name="action_play">再生</string>
+    <string name="action_pause">一時停止</string>
+    <string name="action_back_5">5秒戻る</string>
+    <string name="action_back_30">30秒戻る</string>
+    <string name="action_back_120">2分戻る</string>
+    <string name="action_fwd_5">5秒進む</string>
+    <string name="action_fwd_30">30秒進む</string>
+    <string name="action_fwd_120">2分進む</string>
+
+    <!-- Settings -->
+    <string name="title_settings">設定</string>
+    <string name="setting_volume_indicator">音量インジケーターを表示</string>
+    <string name="setting_volume_indicator_summary">縦ドラッグで音量を変えたとき、画面中央に音量を表示</string>
+    <string name="setting_seek_indicator">シークインジケーターを表示</string>
+    <string name="setting_seek_indicator_summary">横ドラッグで再生位置を変えたとき、画面中央に時刻を表示</string>
+    <string name="setting_controls_always_visible">操作ボタンを常に表示</string>
+    <string name="setting_controls_always_visible_summary">タップで表示・非表示を切り替えるかわりに、常時表示</string>
+
+    <!-- Empty state -->
+    <string name="empty_slot_hint">タップして動画を選択</string>
+    <string name="placeholder_no_video">未選択</string>
+</resources>
